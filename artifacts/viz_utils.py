@@ -2,20 +2,25 @@ from typing import Any, Dict, List
 
 import streamlit as st
 
-# Optional deps for nicer tables/charts.
+# Optional dependencies for nicer tables/charts.
 try:
+    # Use pandas when available for dataframe handling.
     import pandas as pd
 except ImportError:
+    # Fall back to None so the app can still render basic tables.
     pd = None
 
 try:
+    # Use plotly when available for interactive charts.
     import plotly.express as px
 except ImportError:
+    # Fall back to None so charting is disabled gracefully.
     px = None
 
 
 def charts_available() -> bool:
     """Return True when both pandas and plotly are installed."""
+    # Charts require both pandas (dataframes) and plotly (rendering).
     return pd is not None and px is not None
 
 
@@ -28,10 +33,12 @@ def coerce_datetime_columns(df):
     # Inspect each column for datetime-like values.
     for col in df.columns:
         if df[col].dtype == "object":
+            # Attempt to parse values to datetime for chart-friendly plotting.
             parsed = pd.to_datetime(df[col], errors="coerce")
             # Treat column as datetime if most values parse cleanly.
             if parsed.notna().mean() >= 0.8:
                 df[col] = parsed
+    # Return the possibly updated dataframe.
     return df
 
 
@@ -41,7 +48,9 @@ def build_chart(df):
     # Charts require pandas, plotly, and at least one row.
     if pd is None or px is None or df.empty:
         return None
+    # Normalize datetime-like columns to improve axis detection.
     df = coerce_datetime_columns(df.copy())
+    # Identify numeric columns that are candidates for y-axis values.
     numeric_cols = df.select_dtypes(include="number").columns.tolist()
     # No numeric columns means no sensible chart.
     if not numeric_cols:
@@ -75,6 +84,7 @@ def render_results(rows: List[Dict[str, Any]], show_chart: bool = False) -> None
         if pd is None:
             st.dataframe(rows, use_container_width=True)
             return
+        # Use pandas to render a rich dataframe table.
         df = pd.DataFrame(rows)
         st.dataframe(df, use_container_width=True)
         # Only render a chart when explicitly requested.
@@ -83,4 +93,5 @@ def render_results(rows: List[Dict[str, Any]], show_chart: bool = False) -> None
             if fig is not None:
                 st.plotly_chart(fig, use_container_width=True)
     else:
+        # Provide a user-friendly message when no rows are returned.
         st.info("No rows returned.")
