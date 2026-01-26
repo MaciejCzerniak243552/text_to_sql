@@ -151,22 +151,23 @@ def render_results(
     rows: List[Dict[str, Any]],
     show_chart: bool = False,
     intent: Optional[Dict[str, Any]] = None,
+    key_prefix: Optional[str] = None,
 ) -> None:
     """Display results as a table and an optional chart."""
     # Show rows if we have any.
     if rows:
         # Without pandas, render the list of dicts directly.
         if pd is None:
-            st.dataframe(rows, use_container_width=True)
+            st.dataframe(rows, use_container_width=True, key=f"{key_prefix}-table" if key_prefix else None)
             return
         df = pd.DataFrame(rows)
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(df, use_container_width=True, key=f"{key_prefix}-table" if key_prefix else None)
         # Only render a chart when explicitly requested.
         should_plot = intent.get("requested") if intent else show_chart
         if should_plot:
             fig = build_chart(df, intent=intent)
             if fig is not None:
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True, key=f"{key_prefix}-chart" if key_prefix else None)
             else:
                 st.caption(
                     "Chart not available. Provide a time/category column and at least one numeric column."

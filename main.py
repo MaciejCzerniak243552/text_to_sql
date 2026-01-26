@@ -178,10 +178,14 @@ DEFAULT_GREETING = {
     "content": (
         "Hi! Ask questions about your data in plain language. "
         "Examples: \"How many orders were placed last month?\", "
-        "\"What is the range of order date?\". "
-        "If you want a chart, include words like \"plot\" or use the "
-        "\"Plot results\" toggle. Use the \"Show SQL\" button to see "
-        "the query behind each answer."
+        "\"Calculate daily revenue for February 2025\", "
+        "\"Top 5 categories by revenue\". "
+        "If you want a chart, say \"plot/chart/line/bar\" or use the "
+        "\"Plot results\" toggle. "
+        "You can also ask a follow-up like \"Now plot those data\" to chart "
+        "the previous result. "
+        "If your question is too vague, I will ask for clarification. "
+        "Use the \"Show SQL\" expander to see the query behind each answer."
     ),
 }
 
@@ -311,7 +315,7 @@ with header_container:
             "Plot results",
             value=False,
             key="show_chart",
-            help="Force chat to render a chart for numeric results.",
+            help="Render a chart for numeric results or when your question asks for a chart.",
         )
         if not charts_available():
             st.caption("Charts disabled until pandas and plotly are installed.")
@@ -390,6 +394,7 @@ with chat_container:
                         message["rows"],
                         show_chart=message.get("show_chart", False),
                         intent=message.get("intent"),
+                        key_prefix=f"history-{idx}",
                     )
                 # Show prior error if present.
                 if message.get("error"):
@@ -443,7 +448,12 @@ if user_prompt:
         with chat_container:
             with st.chat_message("assistant"):
                 st.markdown("Here is the chart for the previous result.")
-                render_results(last_result["rows"], show_chart=True, intent=intent)
+                render_results(
+                    last_result["rows"],
+                    show_chart=True,
+                    intent=intent,
+                    key_prefix=f"followup-{len(st.session_state.messages)}",
+                )
                 if last_result.get("sql"):
                     render_sql_button(last_result["sql"], len(st.session_state.messages))
         st.session_state.messages.append(
@@ -509,7 +519,12 @@ if user_prompt:
                 except Exception as exc:
                     answer = f"I could not generate an answer: {exc}"
             st.markdown(answer)
-            render_results(rows, show_chart=plot_requested, intent=intent)
+            render_results(
+                rows,
+                show_chart=plot_requested,
+                intent=intent,
+                key_prefix=f"result-{len(st.session_state.messages)}",
+            )
             render_sql_button(sql, len(st.session_state.messages))
 
             st.session_state.messages.append(
