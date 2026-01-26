@@ -110,6 +110,22 @@ def needs_clarification(question: str, schema: Dict[str, List[str]]) -> Optional
     return None
 
 
+def get_last_result(messages: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Return the most recent assistant message that contains rows."""
+    for message in reversed(messages):
+        if message.get("rows") is not None:
+            return message
+    return None
+
+
+def is_followup_plot_request(question: str) -> bool:
+    """Detect short follow-up plot requests that refer to prior results."""
+    text = question.lower()
+    plot_words = r"\b(plot|chart|graph|visuali[sz]e|trend|line|bar|histogram|scatter|pie|draw|diagram)\b"
+    refer_words = r"\b(this|that|these|those|above|previous|last|prior|same)\b"
+    return bool(re.search(plot_words, text) and re.search(refer_words, text))
+
+
 def render_sql_button(sql: str, index: int) -> None:
     """Show SQL without triggering a rerun that cancels in-flight work."""
     with st.expander("Show SQL"):
@@ -422,6 +438,25 @@ if user_prompt:
         with st.chat_message("user"):
             st.markdown(user_prompt)
     intent = parse_chart_intent(user_prompt, show_chart)
+    last_result = get_last_result(st.session_state.messages)
+    if intent["requested"] and last_result and is_followup_plot_request(user_prompt):
+        with chat_container:
+            with st.chat_message("assistant"):
+                st.markdown("Here is the chart for the previous result.")
+                render_results(last_result["rows"], show_chart=True, intent=intent)
+                if last_result.get("sql"):
+                    render_sql_button(last_result["sql"], len(st.session_state.messages))
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": "Here is the chart for the previous result.",
+                "sql": last_result.get("sql"),
+                "rows": last_result.get("rows"),
+                "show_chart": True,
+                "intent": intent,
+            }
+        )
+        st.stop()
     clarification = needs_clarification(user_prompt, schema)
     if clarification:
         with chat_container:
