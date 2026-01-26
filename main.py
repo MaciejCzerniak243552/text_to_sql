@@ -16,7 +16,7 @@ from langchain_ollama.llms import OllamaLLM
 from artifacts.config_utils import build_db_url, get_setting, load_dotenv_file
 from artifacts.db_utils import extract_schema, run_query
 from artifacts.llm_utils import fix_sql_query, generate_answer, infer_range_answer, to_sql_query
-from artifacts.sql_safety import ensure_limit, is_safe_sql
+from artifacts.sql_safety import ensure_limit, is_safe_sql, sql_safety_reason
 from artifacts.viz_utils import charts_available, render_results
 
 # Load environment variables from a local .env file when present.
@@ -136,8 +136,9 @@ def query_with_retries(
         # Enforce limits and safety checks before execution.
         sql = ensure_limit(sql, limit=limit, chart_mode=bool(intent and intent.get("requested")))
         # Stop early if the SQL violates safety rules.
-        if not is_safe_sql(sql, schema):
-            return {"sql": sql, "rows": None, "error": "Generated SQL was not a safe SELECT statement."}
+        safety_error = sql_safety_reason(sql, schema)
+        if safety_error:
+            return {"sql": sql, "rows": None, "error": safety_error}
         # Guard against repeated SQL that never fixes the error.
         if sql in seen_sql:
             return {"sql": sql, "rows": None, "error": "Generated SQL repeated without fixing the error."}

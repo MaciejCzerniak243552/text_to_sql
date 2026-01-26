@@ -9,6 +9,8 @@ DISALLOWED = re.compile(
     re.IGNORECASE,
 )
 TABLE_REF_RE = re.compile(r"\b(from|join)\s+([`\"\[]?[\w.]+[`\"\]]?)", re.IGNORECASE)
+CTE_NAME_RE = re.compile(r"\bwith\s+([a-zA-Z_][\w]*)\s+as\s*\(|,\s*([a-zA-Z_][\w]*)\s+as\s*\(", re.IGNORECASE)
+COMMENT_RE = re.compile(r"(--[^\n]*|/\*.*?\*/)", re.DOTALL)
 DISALLOWED_SCHEMA_PREFIXES = {"information_schema", "mysql", "performance_schema", "sys", "pg_catalog"}
 
 
@@ -22,6 +24,21 @@ def normalize_identifier(name: str) -> str:
 def extract_table_refs(sql: str) -> List[str]:
     """Find table tokens after FROM/JOIN for allowlist checks."""
     return [match[1] for match in TABLE_REF_RE.findall(sql)]
+
+
+def extract_cte_names(sql: str) -> List[str]:
+    """Extract CTE names from WITH clauses."""
+    names: List[str] = []
+    for match in CTE_NAME_RE.findall(sql):
+        name = match[0] or match[1]
+        if name:
+            names.append(name)
+    return names
+
+
+def strip_comments(sql: str) -> str:
+    """Remove SQL comments for safer parsing."""
+    return COMMENT_RE.sub(" ", sql)
 
 
 # Block reads from system schemas.
@@ -46,25 +63,35 @@ def normalize_table_name(ref: str) -> str:
 
 
 # Accept only safe SELECT/CTE queries that target known tables.
-def is_safe_sql(sql: str, schema: Dict[str, List[str]]) -> bool:
-    """Validate that SQL is read-only and targets only known tables."""
+def sql_safety_reason(sql: str, schema: Dict[str, List[str]]) -> str:
+    """Return an error string if SQL is unsafe, otherwise an empty string."""
+    stripped = strip_comments(sql)
     # Only allow SELECT or CTEs.
-    if not ALLOWED_START.match(sql):
-        return False
+    if not ALLOWED_START.match(stripped):
+        return "Only SELECT statements are allowed."
     # Block dangerous keywords and constructs.
-    if DISALLOWED.search(sql):
-        return False
-    refs = extract_table_refs(sql)
+    if DISALLOWED.search(stripped):
+        return "The query includes a disallowed keyword or construct."
+    refs = extract_table_refs(stripped)
     # Reject any reference to system schemas.
     for ref in refs:
         if has_disallowed_prefix(ref):
-            return False
+            return "The query references a system schema that is blocked."
     tables = {normalize_table_name(ref) for ref in refs if normalize_table_name(ref)}
     # If we can't detect table names, allow (conservative behavior).
     if not tables:
-        return True
+        return ""
     allowed = {name.lower() for name in schema.keys()}
-    return all(table.lower() in allowed for table in tables)
+    allowed.update(name.lower() for name in extract_cte_names(stripped))
+    for table in tables:
+        if table.lower() not in allowed:
+            return f"Unknown table referenced: {table}"
+    return ""
+
+
+def is_safe_sql(sql: str, schema: Dict[str, List[str]]) -> bool:
+    """Validate that SQL is read-only and targets only known tables."""
+    return sql_safety_reason(sql, schema) == ""
 
 
 # Default safety cap on result size.
