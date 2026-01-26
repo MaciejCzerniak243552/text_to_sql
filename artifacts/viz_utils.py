@@ -1,26 +1,22 @@
-from typing import Any, Dict, List
+import re
+from typing import Any, Dict, List, Optional
 
 import streamlit as st
 
-# Optional dependencies for nicer tables/charts.
+# Optional deps for nicer tables/charts.
 try:
-    # Use pandas when available for dataframe handling.
     import pandas as pd
 except ImportError:
-    # Fall back to None so the app can still render basic tables.
     pd = None
 
 try:
-    # Use plotly when available for interactive charts.
     import plotly.express as px
 except ImportError:
-    # Fall back to None so charting is disabled gracefully.
     px = None
 
 
 def charts_available() -> bool:
     """Return True when both pandas and plotly are installed."""
-    # Charts require both pandas (dataframes) and plotly (rendering).
     return pd is not None and px is not None
 
 
@@ -33,24 +29,40 @@ def coerce_datetime_columns(df):
     # Inspect each column for datetime-like values.
     for col in df.columns:
         if df[col].dtype == "object":
-            # Attempt to parse values to datetime for chart-friendly plotting.
             parsed = pd.to_datetime(df[col], errors="coerce")
             # Treat column as datetime if most values parse cleanly.
             if parsed.notna().mean() >= 0.8:
                 df[col] = parsed
-    # Return the possibly updated dataframe.
+    return df
+
+
+def coerce_numeric_columns(df):
+    """Convert object columns to numeric when they look numeric-like."""
+    if pd is None:
+        return df
+    for col in df.columns:
+        if df[col].dtype == "object":
+            series = df[col].astype(str).str.strip()
+            parsed = pd.to_numeric(series, errors="coerce")
+            if parsed.notna().mean() >= 0.8:
+                df[col] = parsed
+                continue
+            cleaned = series.str.replace(r"[,\s$]", "", regex=True)
+            cleaned = cleaned.str.replace(r"[A-Za-z]", "", regex=True)
+            parsed = pd.to_numeric(cleaned, errors="coerce")
+            if parsed.notna().mean() >= 0.8:
+                df[col] = parsed
     return df
 
 
 # Pick a reasonable chart (line for time series, bar otherwise).
-def build_chart(df):
+def build_chart(df, intent: Optional[Dict[str, Any]] = None):
     """Build a plotly chart from the dataframe when possible."""
     # Charts require pandas, plotly, and at least one row.
     if pd is None or px is None or df.empty:
         return None
-    # Normalize datetime-like columns to improve axis detection.
     df = coerce_datetime_columns(df.copy())
-    # Identify numeric columns that are candidates for y-axis values.
+    df = coerce_numeric_columns(df)
     numeric_cols = df.select_dtypes(include="number").columns.tolist()
     # No numeric columns means no sensible chart.
     if not numeric_cols:
@@ -64,19 +76,82 @@ def build_chart(df):
             break
     # Fall back to a synthetic index when all columns are numeric.
     if x_col is None:
-        df = df.reset_index(drop=True)
-        df["index"] = df.index
-        x_col = "index"
+        time_candidates = [col for col in df.columns if re.search(r"(date|day|month|year|time)", col, re.I)]
+        if time_candidates:
+            candidate = time_candidates[0]
+            remaining = [col for col in numeric_cols if col != candidate]
+            if remaining:
+                x_col = candidate
+                numeric_cols = remaining
+        if x_col is None:
+            df = df.reset_index(drop=True)
+            df["index"] = df.index
+            x_col = "index"
 
-    # Line charts for time series; otherwise use a bar chart.
-    if pd.api.types.is_datetime64_any_dtype(df[x_col]):
-        return px.line(df, x=x_col, y=numeric_cols)
-    y_cols = numeric_cols if len(numeric_cols) > 1 else numeric_cols[0]
-    return px.bar(df, x=x_col, y=y_cols)
+    chart_type = (intent or {}).get("chart_type", "auto")
+    grain = (intent or {}).get("grain", "auto")
+    requested_x = (intent or {}).get("x", "auto")
+    requested_y = (intent or {}).get("y", "auto")
+
+    if requested_x != "auto" and requested_x in df.columns:
+        x_col = requested_x
+    elif grain != "auto" and grain != "none":
+        datetime_candidates = [
+            col for col in df.columns if pd.api.types.is_datetime64_any_dtype(df[col])
+        ]
+        if datetime_candidates:
+            x_col = datetime_candidates[0]
+
+    if requested_y != "auto" and requested_y in numeric_cols:
+        y_cols = requested_y
+    else:
+        preferred = ["net_revenue", "gross_revenue", "refunds", "revenue", "total"]
+        y_cols = None
+        for candidate in preferred:
+            for col in numeric_cols:
+                if col.lower() == candidate:
+                    y_cols = col
+                    break
+            if y_cols:
+                break
+        if y_cols is None:
+            y_cols = numeric_cols if len(numeric_cols) > 1 else numeric_cols[0]
+
+    if x_col and pd.api.types.is_datetime64_any_dtype(df[x_col]):
+        df = df.sort_values(x_col)
+
+    if chart_type == "auto":
+        if x_col and pd.api.types.is_datetime64_any_dtype(df[x_col]):
+            chart_type = "line"
+        else:
+            chart_type = "bar"
+
+    if chart_type == "scatter":
+        if len(numeric_cols) < 2:
+            return None
+        return px.scatter(df, x=numeric_cols[0], y=numeric_cols[1])
+    if chart_type == "hist":
+        return px.histogram(df, x=y_cols if isinstance(y_cols, str) else numeric_cols[0])
+    if chart_type == "pie":
+        if x_col is None:
+            x_col = df.columns[0]
+        y_value = y_cols if isinstance(y_cols, str) else numeric_cols[0]
+        return px.pie(df, names=x_col, values=y_value)
+    if chart_type == "line":
+        return px.line(df, x=x_col, y=y_cols)
+    if chart_type == "bar":
+        if isinstance(y_cols, list):
+            y_cols = y_cols[0]
+        return px.bar(df, x=x_col, y=y_cols)
+    return None
 
 
 # Render tabular data plus an optional chart.
-def render_results(rows: List[Dict[str, Any]], show_chart: bool = False) -> None:
+def render_results(
+    rows: List[Dict[str, Any]],
+    show_chart: bool = False,
+    intent: Optional[Dict[str, Any]] = None,
+) -> None:
     """Display results as a table and an optional chart."""
     # Show rows if we have any.
     if rows:
@@ -84,14 +159,17 @@ def render_results(rows: List[Dict[str, Any]], show_chart: bool = False) -> None
         if pd is None:
             st.dataframe(rows, use_container_width=True)
             return
-        # Use pandas to render a rich dataframe table.
         df = pd.DataFrame(rows)
         st.dataframe(df, use_container_width=True)
         # Only render a chart when explicitly requested.
-        if show_chart:
-            fig = build_chart(df)
+        should_plot = intent.get("requested") if intent else show_chart
+        if should_plot:
+            fig = build_chart(df, intent=intent)
             if fig is not None:
                 st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.caption(
+                    "Chart not available. Provide a time/category column and at least one numeric column."
+                )
     else:
-        # Provide a user-friendly message when no rows are returned.
         st.info("No rows returned.")
