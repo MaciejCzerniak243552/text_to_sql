@@ -311,7 +311,7 @@ with header_container:
             "Plot results",
             value=False,
             key="show_chart",
-            help="Render a chart for numeric results or when your question asks for a chart.",
+            help="Force chat to render a chart for numeric results.",
         )
         if not charts_available():
             st.caption("Charts disabled until pandas and plotly are installed.")
