@@ -199,17 +199,23 @@ st.markdown(
         --footer-height: 80px;
         --input-height: 90px;
     }
+    * {
+        box-sizing: border-box;
+    }
     html, body, [data-testid="stAppViewContainer"] {
         height: 100%;
         overflow: hidden;
+        overflow-x: hidden;
     }
     section.main {
         height: 100vh;
         overflow: hidden;
+        overflow-x: hidden;
     }
     section.main > div {
         height: 100%;
         overflow: hidden;
+        overflow-x: hidden;
         padding-top: var(--header-height);
         padding-bottom: var(--footer-height);
         box-sizing: border-box;
@@ -233,6 +239,9 @@ st.markdown(
     button[aria-label="Open sidebar"] {
         display: none;
     }
+    [data-testid="stSidebarResizer"] {
+        display: none !important;
+    }
     .app-header {
         position: fixed;
         top: 0;
@@ -254,6 +263,7 @@ st.markdown(
     }
     .chat-scroll {
         overflow-y: auto;
+        overflow-x: hidden;
         height: calc(100vh - var(--header-height) - var(--footer-height) - var(--input-height));
         padding-right: 8px;
     }
@@ -273,6 +283,12 @@ st.markdown(
         bottom: var(--footer-height);
         background: var(--background-color, white);
         padding-top: 8px;
+    }
+    .stPlotlyChart, .plot-container, .js-plotly-plot {
+        max-width: 100% !important;
+    }
+    div[data-testid="stDataFrame"] {
+        max-width: 100% !important;
     }
     </style>
     """,
@@ -355,9 +371,6 @@ try:
     st.sidebar.markdown(
         f"""
         <style>
-        .data-testid="stSidebarResizer"] {{
-        display: none;
-        }}
         .sidebar-logo {{
             text-align: center;
             margin: 4px 0 12px;
