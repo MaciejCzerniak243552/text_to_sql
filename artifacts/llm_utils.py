@@ -19,6 +19,10 @@ Requirements:
 Time bucketing rules:
 - Any time-bucketing expression used in SELECT must also appear in GROUP BY.
 - If grouping by quarter, always include year in SELECT and GROUP BY (never QUARTER alone).
+- If grouping by quarter, return a single combined bucket column (e.g., year_quarter),
+  not separate year and quarter columns.
+- If grouping by month, include year with the month (never MONTH alone).
+- If grouping by week, include year with the week (never WEEK alone).
 Default time axis:
 - Use orders.order_date for revenue time series unless the user explicitly asks for refund processing time.
 
@@ -59,6 +63,7 @@ Requirements:
 Time bucketing rules:
 - Any time-bucketing expression used in SELECT must also appear in GROUP BY.
 - If grouping by quarter, always include year in SELECT and GROUP BY (never QUARTER alone).
+ - If grouping by quarter, return a single x bucket (year+quarter), not separate year/quarter columns.
 Construct x deterministically by grain:
 - day: DATE(date_col)
 - week: YEARWEEK(date_col, 1)
@@ -66,7 +71,10 @@ Construct x deterministically by grain:
 - quarter: CONCAT(YEAR(date_col), '-Q', QUARTER(date_col))  (must include year)
 - year: YEAR(date_col)
 X uniqueness:
-- x must uniquely identify the bucket (e.g., quarter must include year).
+- x must uniquely identify the bucket (e.g., month/week/quarter must include year).
+Week/month rules:
+- If grouping by week, include year with the week (never WEEK alone).
+- If grouping by month, include year with the month (never MONTH alone).
 Default time axis:
 - Use orders.order_date for revenue time series unless the user explicitly asks for refund processing time.
 
@@ -118,6 +126,9 @@ Keep numeric/date columns unformatted (no FORMAT/CONCAT).
 Use only tables and columns present in the schema.
 If the user asked for revenue without qualifiers, return gross_revenue only.
 If the question is about "most/least" or "top/bottom", return only the top row (LIMIT 1).
+If grouping by quarter, return a single combined bucket column (year_quarter), not separate year/quarter columns.
+If grouping by month, include year with the month (no separate year/month columns).
+If grouping by week, include year with the week (no separate year/week columns).
 """
 
 FIX_CHART_TEMPLATE = """
@@ -137,6 +148,9 @@ Chart requirements:
 Use only tables and columns present in the schema.
 If the user asked for revenue without qualifiers, return x and gross_revenue only.
 If the question is about "most/least" or "top/bottom", return only the top row (LIMIT 1).
+If grouping by quarter, x must combine year+quarter (no separate year/quarter columns).
+If grouping by month, x must combine year+month (no separate year/month columns).
+If grouping by week, x must combine year+week (no separate year/week columns).
 
 Chart intent: chart_type={chart_type}, grain={grain}, x={x}, y={y}, series={series}, sort={sort}
 """

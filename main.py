@@ -355,6 +355,9 @@ try:
     st.sidebar.markdown(
         f"""
         <style>
+        .data-testid="stSidebarResizer"] {{
+        display: none;
+        }}
         .sidebar-logo {{
             text-align: center;
             margin: 4px 0 12px;
