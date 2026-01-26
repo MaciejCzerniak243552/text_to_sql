@@ -198,6 +198,7 @@ st.markdown(
         --header-height: 80px;
         --footer-height: 80px;
         --input-height: 90px;
+        --sidebar-width: 15vw;
     }
     * {
         box-sizing: border-box;
@@ -241,6 +242,15 @@ st.markdown(
     }
     [data-testid="stSidebarResizer"] {
         display: none !important;
+    }
+    section[data-testid="stSidebar"] {
+        width: var(--sidebar-width) !important;
+        min-width: var(--sidebar-width) !important;
+        max-width: var(--sidebar-width) !important;
+        flex: 0 0 var(--sidebar-width) !important;
+    }
+    section[data-testid="stSidebar"] > div:first-child {
+        width: var(--sidebar-width) !important;
     }
     .app-header {
         position: fixed;
