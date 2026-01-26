@@ -43,6 +43,9 @@ def coerce_numeric_columns(df):
     for col in df.columns:
         if df[col].dtype == "object":
             series = df[col].astype(str).str.strip()
+            # Skip columns that contain letters (e.g., "2024-Q1") to preserve bucket labels.
+            if series.str.contains(r"[A-Za-z]", regex=True, na=False).mean() >= 0.1:
+                continue
             parsed = pd.to_numeric(series, errors="coerce")
             if parsed.notna().mean() >= 0.8:
                 df[col] = parsed
@@ -119,6 +122,9 @@ def build_chart(df, intent: Optional[Dict[str, Any]] = None):
 
     if x_col and pd.api.types.is_datetime64_any_dtype(df[x_col]):
         df = df.sort_values(x_col)
+    elif x_col and intent and intent.get("grain") in {"quarter", "month", "week"}:
+        # Preserve categorical bucket labels for quarters/months/weeks.
+        df[x_col] = df[x_col].astype(str)
 
     if chart_type == "auto":
         if x_col and pd.api.types.is_datetime64_any_dtype(df[x_col]):
