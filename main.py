@@ -177,14 +177,14 @@ DEFAULT_GREETING = {
     "role": "assistant",
     "content": (
         "Hi! Ask questions about your data in plain language.\n\n"
-        "Examples:\n"
-        "• \"How many orders were placed last month?\"\n"
-        "• \"Calculate daily revenue for February 2025\"\n"
+        "Examples:\n\n"
+        "• \"How many orders were placed last month?\"\n\n"
+        "• \"Calculate daily revenue for February 2025\"\n\n"
         "• \"Top 5 categories by revenue\"\n\n"
         "If you want a chart, say \"plot\", \"chart\", \"line\", or \"bar\", "
         "or use the \"Plot results\" toggle. You can also follow up with "
         "\"Now plot those results\".\n\n"
-        "If a question is unclear, I may ask for clarification. "
+        "If a question is unclear, I may ask for clarification. \n\n"
         "Use the \"Show SQL\" expander to see the query behind each answer."
     ),
 }
@@ -198,6 +198,7 @@ st.markdown(
         --header-height: 80px;
         --footer-height: 80px;
         --input-height: 90px;
+        --st-header-height: 3rem;
         --sidebar-width: 15vw;
     }
     * {
@@ -217,9 +218,27 @@ st.markdown(
         height: 100%;
         overflow: hidden;
         overflow-x: hidden;
-        padding-top: var(--header-height);
+        padding-top: calc(var(--header-height) + var(--st-header-height));
         padding-bottom: var(--footer-height);
         box-sizing: border-box;
+    }
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+        box-shadow: none !important;
+    }
+    header[data-testid="stHeader"] > div {
+        background: transparent !important;
+    }
+    div[data-testid="stToolbar"],
+    div[data-testid="stDecoration"] {
+        background: transparent !important;
+    }
+    header[data-testid="stHeader"] {
+        display: none;
+    }
+    div[data-testid="stDecoration"],
+    div[data-testid="stToolbar"] {
+        display: none;
     }
     [data-testid="collapsedControl"] {
         display: none;
@@ -247,7 +266,7 @@ st.markdown(
     }
     .app-header {
         position: fixed;
-        top: 0;
+        top: var(--st-header-height);
         left: 0;
         width: 100%;
         z-index: 1000;
@@ -267,7 +286,7 @@ st.markdown(
     .chat-scroll {
         overflow-y: auto;
         overflow-x: hidden;
-        height: calc(100vh - var(--header-height) - var(--footer-height) - var(--input-height));
+        height: calc(100vh - var(--header-height) - var(--st-header-height) - var(--footer-height) - var(--input-height));
         padding-right: 8px;
     }
     .fixed-footer {
