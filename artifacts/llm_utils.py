@@ -13,8 +13,14 @@ You are a SQL expert. Given the following schema: {schema_details}, translate th
 natural language question into a valid MySQL query.
 Requirements:
 - Return ONLY the SQL query (no code fences, no extra text).
-- Do not format numbers or dates (avoid FORMAT, CONCAT, or currency symbols).
+- Do not format currency or numeric measures (avoid FORMAT or currency symbols).
+- String labels for time buckets are allowed when used as the x axis.
 - Use only tables and columns present in the schema (do not invent tables like date calendars).
+Time bucketing rules:
+- Any time-bucketing expression used in SELECT must also appear in GROUP BY.
+- If grouping by quarter, always include year in SELECT and GROUP BY (never QUARTER alone).
+Default time axis:
+- Use orders.order_date for revenue time series unless the user explicitly asks for refund processing time.
 
 Revenue rules:
 - Use order_items to calculate revenue from item price and quantity.
@@ -24,9 +30,14 @@ Revenue rules:
 Defaults:
 - If the user says "revenue" without qualifiers, treat it as gross revenue.
 - If refunds are missing for a day, treat refunds as zero (use COALESCE).
+Ranking rules:
+- For questions like "which ... had the most/least" or "top/bottom", order by the metric and LIMIT 1
+  (or LIMIT N if the user specifies N).
 Join rules:
 - order_items joins orders on order_items.order_id = orders.order_id.
 - returns joins orders on returns.order_id = orders.order_id.
+Refund aggregation rule:
+- When subtracting refunds, aggregate returns per order_id first (e.g., a CTE refunds_by_order) to avoid double counting.
 Default:
 - If revenue is requested without a grain, default to daily using orders.order_date.
 
@@ -42,8 +53,22 @@ Requirements:
 - Alias the x column as x, and numeric columns clearly (e.g., gross_revenue, refunds, net_revenue).
 - For time series, group to one row per bucket based on grain (day/week/month/quarter/year).
 - Include ORDER BY x ASC unless sort explicitly requests DESC.
-- Do not format numbers or dates (avoid FORMAT, CONCAT, or currency symbols).
+- Do not format currency or numeric measures (avoid FORMAT or currency symbols).
+- String labels for time buckets are allowed when used as the x axis.
 - Use only tables and columns present in the schema (do not invent tables like date calendars).
+Time bucketing rules:
+- Any time-bucketing expression used in SELECT must also appear in GROUP BY.
+- If grouping by quarter, always include year in SELECT and GROUP BY (never QUARTER alone).
+Construct x deterministically by grain:
+- day: DATE(date_col)
+- week: YEARWEEK(date_col, 1)
+- month: DATE_FORMAT(date_col, '%Y-%m-01')
+- quarter: CONCAT(YEAR(date_col), '-Q', QUARTER(date_col))  (must include year)
+- year: YEAR(date_col)
+X uniqueness:
+- x must uniquely identify the bucket (e.g., quarter must include year).
+Default time axis:
+- Use orders.order_date for revenue time series unless the user explicitly asks for refund processing time.
 
 Revenue rules:
 - Use order_items to calculate revenue from item price and quantity.
@@ -54,13 +79,26 @@ Defaults:
 - If the user says "revenue" without qualifiers, return only gross_revenue (plus the x column).
 - Include gross_revenue or refunds only if explicitly requested.
 - If refunds are missing for a day, treat refunds as zero (use COALESCE).
+Ranking rules:
+- For questions like "which ... had the most/least" or "top/bottom", order by the metric and LIMIT 1
+  (or LIMIT N if the user specifies N).
 Join rules:
 - order_items joins orders on order_items.order_id = orders.order_id.
 - returns joins orders on returns.order_id = orders.order_id.
+Refund aggregation rule:
+- When subtracting refunds, aggregate returns per order_id first (e.g., a CTE refunds_by_order) to avoid double counting.
 Default:
 - If revenue is requested without a grain, default to daily using orders.order_date.
 - If asked for daily revenue in Feb 2025, filter by orders.order_date for Feb 2025
   and group by DATE(orders.order_date) AS x.
+Example (quarterly gross revenue by sale date):
+SELECT CONCAT(YEAR(o.order_date), '-Q', QUARTER(o.order_date)) AS x,
+       SUM(oi.price*oi.quantity) AS gross_revenue
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.order_id
+WHERE o.order_date >= '2024-01-01' AND o.order_date < '2026-01-01'
+GROUP BY YEAR(o.order_date), QUARTER(o.order_date)
+ORDER BY YEAR(o.order_date), QUARTER(o.order_date);
 
 Chart intent: chart_type={chart_type}, grain={grain}, x={x}, y={y}, series={series}, sort={sort}
 User question: {query}
@@ -79,6 +117,7 @@ Fix the query for MySQL. Return ONLY the corrected SQL query (no code fences, no
 Keep numeric/date columns unformatted (no FORMAT/CONCAT).
 Use only tables and columns present in the schema.
 If the user asked for revenue without qualifiers, return gross_revenue only.
+If the question is about "most/least" or "top/bottom", return only the top row (LIMIT 1).
 """
 
 FIX_CHART_TEMPLATE = """
@@ -97,6 +136,7 @@ Chart requirements:
 - Keep numeric/date columns unformatted.
 Use only tables and columns present in the schema.
 If the user asked for revenue without qualifiers, return x and gross_revenue only.
+If the question is about "most/least" or "top/bottom", return only the top row (LIMIT 1).
 
 Chart intent: chart_type={chart_type}, grain={grain}, x={x}, y={y}, series={series}, sort={sort}
 """
