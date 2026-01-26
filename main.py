@@ -221,13 +221,6 @@ st.markdown(
         padding-bottom: var(--footer-height);
         box-sizing: border-box;
     }
-    header[data-testid="stHeader"] {
-        display: none;
-    }
-    div[data-testid="stDecoration"],
-    div[data-testid="stToolbar"] {
-        display: none;
-    }
     [data-testid="collapsedControl"] {
         display: none;
     }
