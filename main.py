@@ -199,6 +199,21 @@ st.markdown(
         --footer-height: 80px;
         --input-height: 90px;
     }
+    html, body, [data-testid="stAppViewContainer"] {
+        height: 100%;
+        overflow: hidden;
+    }
+    section.main {
+        height: 100vh;
+        overflow: hidden;
+    }
+    section.main > div {
+        height: 100%;
+        overflow: hidden;
+        padding-top: var(--header-height);
+        padding-bottom: var(--footer-height);
+        box-sizing: border-box;
+    }
     header[data-testid="stHeader"] {
         display: none;
     }
@@ -237,12 +252,9 @@ st.markdown(
         color: rgba(0, 0, 0, 0.6);
         font-size: 0.85rem;
     }
-    .content {
-        margin-top: var(--header-height);
-    }
     .chat-scroll {
         overflow-y: auto;
-        max-height: calc(100vh - var(--header-height) - var(--footer-height) - var(--input-height));
+        height: calc(100vh - var(--header-height) - var(--footer-height) - var(--input-height));
         padding-right: 8px;
     }
     .fixed-footer {
@@ -255,10 +267,6 @@ st.markdown(
         padding: 10px 20px;
         border-top: 1px solid #ddd;
         text-align: center;
-    }
-    section.main > div {
-        margin-bottom: 80px;
-        box-sizing: border-box;
     }
     div[data-testid="stChatInput"] {
         position: sticky;
@@ -315,7 +323,7 @@ with header_container:
             "Plot results",
             value=False,
             key="show_chart",
-            help="Render a chart for numeric results or when your question asks for a chart.",
+            help="Force to render a chart for numeric results.",
         )
         if not charts_available():
             st.caption("Charts disabled until pandas and plotly are installed.")
@@ -420,9 +428,6 @@ components.html(
             const block = chatAnchor.closest('div[data-testid="stVerticalBlock"]');
             if (block && !block.classList.contains("chat-scroll")) {
                 block.classList.add("chat-scroll");
-            }
-            if (block && !block.classList.contains("content")) {
-                block.classList.add("content");
             }
         }
         if ((headerAnchor && chatAnchor) || Date.now() - start > 3000) {
