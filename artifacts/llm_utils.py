@@ -21,6 +21,9 @@ Revenue rules:
 - Use returns to account for refunds where relevant.
 - Net revenue is gross minus refunds.
 - Use the most appropriate date columns from the tables in the schema.
+Defaults:
+- If the user says "revenue" without qualifiers, treat it as gross revenue.
+- If refunds are missing for a day, treat refunds as zero (use COALESCE).
 Join rules:
 - order_items joins orders on order_items.order_id = orders.order_id.
 - returns joins orders on returns.order_id = orders.order_id.
@@ -47,6 +50,10 @@ Revenue rules:
 - Use returns to account for refunds where relevant.
 - Net revenue is gross minus refunds.
 - Use the most appropriate date columns from the tables in the schema.
+Defaults:
+- If the user says "revenue" without qualifiers, return only gross_revenue (plus the x column).
+- Include gross_revenue or refunds only if explicitly requested.
+- If refunds are missing for a day, treat refunds as zero (use COALESCE).
 Join rules:
 - order_items joins orders on order_items.order_id = orders.order_id.
 - returns joins orders on returns.order_id = orders.order_id.
@@ -71,6 +78,7 @@ Error: {error}
 Fix the query for MySQL. Return ONLY the corrected SQL query (no code fences, no extra text).
 Keep numeric/date columns unformatted (no FORMAT/CONCAT).
 Use only tables and columns present in the schema.
+If the user asked for revenue without qualifiers, return gross_revenue only.
 """
 
 FIX_CHART_TEMPLATE = """
@@ -88,6 +96,7 @@ Chart requirements:
 - Group by the x bucket and ORDER BY x ASC (unless sort says DESC).
 - Keep numeric/date columns unformatted.
 Use only tables and columns present in the schema.
+If the user asked for revenue without qualifiers, return x and gross_revenue only.
 
 Chart intent: chart_type={chart_type}, grain={grain}, x={x}, y={y}, series={series}, sort={sort}
 """
