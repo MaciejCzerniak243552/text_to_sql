@@ -12,15 +12,20 @@ SQL_TEMPLATE = """
 You are a SQL expert. Given the following schema: {schema_details}, translate the user's
 natural language question into a valid MySQL query.
 Requirements:
-- Return ONLY the SQL code inside a code block.
+- Return ONLY the SQL query (no code fences, no extra text).
 - Do not format numbers or dates (avoid FORMAT, CONCAT, or currency symbols).
+- Use only tables and columns present in the schema (do not invent tables like date calendars).
 
 Revenue rules:
-- Gross revenue = SUM(order_items.price * order_items.quantity)
-- Refunds = SUM(returns.refund_amount) (joined on order_id)
-- Net revenue = gross - refunds
-- Sales date uses orders.order_date
-- Refund processing uses returns.processed_date
+- Use order_items to calculate revenue from item price and quantity.
+- Use returns to account for refunds where relevant.
+- Net revenue is gross minus refunds.
+- Use the most appropriate date columns from the tables in the schema.
+Join rules:
+- order_items joins orders on order_items.order_id = orders.order_id.
+- returns joins orders on returns.order_id = orders.order_id.
+Default:
+- If revenue is requested without a grain, default to daily using orders.order_date.
 
 User question: {query}
 """
@@ -29,21 +34,26 @@ CHART_SQL_TEMPLATE = """
 You are a SQL expert. Given the following schema: {schema_details}, translate the user's
 natural language question into a valid MySQL query for charting.
 Requirements:
-- Return ONLY the SQL code inside a code block.
+- Return ONLY the SQL query (no code fences, no extra text).
 - Output must be exactly one x column and 1-3 numeric y columns. No extra columns.
-- Use clear aliases (e.g., day, gross_revenue, refunds, net_revenue).
+- Alias the x column as x, and numeric columns clearly (e.g., gross_revenue, refunds, net_revenue).
 - For time series, group to one row per bucket based on grain (day/week/month/quarter/year).
 - Include ORDER BY x ASC unless sort explicitly requests DESC.
 - Do not format numbers or dates (avoid FORMAT, CONCAT, or currency symbols).
+- Use only tables and columns present in the schema (do not invent tables like date calendars).
 
 Revenue rules:
-- Gross revenue = SUM(order_items.price * order_items.quantity)
-- Refunds = SUM(returns.refund_amount) (joined on order_id)
-- Net revenue = gross - refunds
-- Sales date uses orders.order_date
-- Refund processing uses returns.processed_date
+- Use order_items to calculate revenue from item price and quantity.
+- Use returns to account for refunds where relevant.
+- Net revenue is gross minus refunds.
+- Use the most appropriate date columns from the tables in the schema.
+Join rules:
+- order_items joins orders on order_items.order_id = orders.order_id.
+- returns joins orders on returns.order_id = orders.order_id.
+Default:
+- If revenue is requested without a grain, default to daily using orders.order_date.
 - If asked for daily revenue in Feb 2025, filter by orders.order_date for Feb 2025
-  and group by DATE(orders.order_date).
+  and group by DATE(orders.order_date) AS x.
 
 Chart intent: chart_type={chart_type}, grain={grain}, x={x}, y={y}, series={series}, sort={sort}
 User question: {query}
@@ -58,8 +68,9 @@ SQL:
 {sql}
 ```
 Error: {error}
-Fix the query for MySQL. Return ONLY the corrected SQL code inside a code block.
+Fix the query for MySQL. Return ONLY the corrected SQL query (no code fences, no extra text).
 Keep numeric/date columns unformatted (no FORMAT/CONCAT).
+Use only tables and columns present in the schema.
 """
 
 FIX_CHART_TEMPLATE = """
@@ -71,11 +82,12 @@ SQL:
 {sql}
 ```
 Error: {error}
-Fix the query for MySQL. Return ONLY the corrected SQL code inside a code block.
+Fix the query for MySQL. Return ONLY the corrected SQL query (no code fences, no extra text).
 Chart requirements:
-- Exactly one x column and 1-3 numeric y columns.
+- Exactly one x column (aliased as x) and 1-3 numeric y columns.
 - Group by the x bucket and ORDER BY x ASC (unless sort says DESC).
 - Keep numeric/date columns unformatted.
+Use only tables and columns present in the schema.
 
 Chart intent: chart_type={chart_type}, grain={grain}, x={x}, y={y}, series={series}, sort={sort}
 """

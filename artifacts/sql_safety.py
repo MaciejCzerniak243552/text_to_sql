@@ -9,7 +9,10 @@ DISALLOWED = re.compile(
     re.IGNORECASE,
 )
 TABLE_REF_RE = re.compile(r"\b(from|join)\s+([`\"\[]?[\w.]+[`\"\]]?)", re.IGNORECASE)
-CTE_NAME_RE = re.compile(r"\bwith\s+([a-zA-Z_][\w]*)\s+as\s*\(|,\s*([a-zA-Z_][\w]*)\s+as\s*\(", re.IGNORECASE)
+CTE_NAME_RE = re.compile(
+    r"\bwith\s+(?:recursive\s+)?([a-zA-Z_][\w]*)\s+as\s*\(|,\s*([a-zA-Z_][\w]*)\s+as\s*\(",
+    re.IGNORECASE,
+)
 COMMENT_RE = re.compile(r"(--[^\n]*|/\*.*?\*/)", re.DOTALL)
 DISALLOWED_SCHEMA_PREFIXES = {"information_schema", "mysql", "performance_schema", "sys", "pg_catalog"}
 
