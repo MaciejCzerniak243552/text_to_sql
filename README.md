@@ -24,9 +24,16 @@ python -m venv .venv
 # macOS/Linux
 # source .venv/bin/activate
 
-pip install -U streamlit langchain-ollama sqlalchemy mysqlclient
-# Optional (for charts)
-pip install -U pandas plotly
+pip install -r requirements.txt
+```
+
+MySQL driver (choose one):
+
+```bash
+# Option A (C-based, faster, may need system build tools)
+pip install mysqlclient
+# Option B (pure Python)
+pip install pymysql
 ```
 
 ## Configuration
