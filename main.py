@@ -199,7 +199,7 @@ st.markdown(
         --header-offset: 40px;
         --footer-height: 80px;
         --input-height: 90px;
-        --sidebar-width: 15.5vw;
+        --sidebar-width: 16vw;
     }
     * {
         box-sizing: border-box;
