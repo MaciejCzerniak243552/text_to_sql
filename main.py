@@ -25,6 +25,14 @@ from artifacts.viz_utils import charts_available, render_results
 load_dotenv_file(os.getenv("DOTENV_PATH", ".env"))
 
 
+@st.cache_resource(show_spinner=False)
+def get_ollama_client(model_name: str, base_url: Optional[str]) -> OllamaLLM:
+    """Cache the Ollama client so models stay warm across Streamlit reruns."""
+    if base_url:
+        return OllamaLLM(model=model_name, base_url=base_url)
+    return OllamaLLM(model=model_name)
+
+
 def parse_chart_intent(user_prompt: str, show_chart_toggle: bool) -> Dict[str, Any]:
     """Parse a deterministic chart intent structure from the prompt."""
     text = user_prompt.lower()
@@ -313,10 +321,7 @@ if not OLLAMA_MODEL:
     st.stop()
 
 # Use a remote Ollama base URL when configured; otherwise default to local.
-if OLLAMA_BASE_URL:
-    model = OllamaLLM(model=OLLAMA_MODEL, base_url=OLLAMA_BASE_URL)
-else:
-    model = OllamaLLM(model=OLLAMA_MODEL)
+model = get_ollama_client(OLLAMA_MODEL, OLLAMA_BASE_URL)
 
 QUERY_LIMIT = int(get_setting("QUERY_LIMIT", "200"))
 SQL_MAX_RETRIES = int(get_setting("SQL_MAX_RETRIES", "2"))
