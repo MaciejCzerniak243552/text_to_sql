@@ -196,7 +196,7 @@ st.markdown(
     <style>
     :root {
         --header-height: 80px;
-        --header-offset: 22px;
+        --header-offset: 26px;
         --footer-height: 80px;
         --input-height: 90px;
         --sidebar-width: 15vw;
@@ -329,7 +329,7 @@ db_display_name = get_db_display_name(db_url)
 header_container = st.container()
 with header_container:
     st.markdown('<div id="header-anchor"></div>', unsafe_allow_html=True)
-    header_left, header_center, header_right_center, header_right = st.columns([1.2, 3, 0.6, 1.2], vertical_alignment="center")
+    header_left, header_center, header_right_center, header_right = st.columns([0.9, 3, 0.6, 1.2], vertical_alignment="center")
     with header_left:
         st.markdown('')
     with header_center:
