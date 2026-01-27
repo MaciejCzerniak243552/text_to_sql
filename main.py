@@ -195,8 +195,8 @@ st.markdown(
     """
     <style>
     :root {
-        --header-height: 130px;
-        --header-offset: 20px;
+        --header-height: 110px;
+        --header-offset: 40px;
         --footer-height: 80px;
         --input-height: 90px;
         --sidebar-width: 15vw;
@@ -254,7 +254,7 @@ st.markdown(
         z-index: 1000;
         background: var(--background-color, white);
         border-bottom: 1px solid #ddd;
-        padding: 10px 20px;
+        padding: 20px 20px;
     }
     .app-title {
         font-size: 20px;
