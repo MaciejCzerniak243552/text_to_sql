@@ -1,6 +1,6 @@
 langchain_core==1.2.7
 langchain_ollama==1.0.1
-pandas==3.0.0
+pandas==2.3.3
 plotly==6.5.2
-SQLAlchemy==2.0.46
+SQLAlchemy==2.0.45
 streamlit==1.53.0
