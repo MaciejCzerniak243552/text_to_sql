@@ -176,16 +176,16 @@ def query_with_retries(
 DEFAULT_GREETING = {
     "role": "assistant",
     "content": (
-        "Hi! Ask questions about your data in plain language.\n\n"
-        "Examples:\n"
-        "• \"How many orders were placed last month?\"\n"
-        "• \"Calculate daily revenue for February 2025\"\n"
-        "• \"Top 5 categories by revenue\"\n\n"
-        "If you want a chart, say \"plot\", \"chart\", \"line\", or \"bar\", "
-        "or use the \"Plot results\" toggle. You can also follow up with "
-        "\"Now plot those results\".\n\n"
-        "If a question is unclear, I may ask for clarification. "
-        "Use the \"Show SQL\" expander to see the query behind each answer."
+        """Hi! Ask questions about your data in plain language.
+        Examples:
+        • \"How many orders were placed last month?\"
+        • \"Calculate daily revenue for February 2025\"
+        • \"Top 5 categories by revenue\"
+        If you want a chart, say \"plot\", \"chart\", \"line\", or \"bar\",
+        or use the \"Plot results\" toggle. You can also follow up with
+        \"Now plot those results\".
+        If a question is unclear, I may ask for clarification.
+        Use the \"Show SQL\" expander to see the query behind each answer."""
     ),
 }
 
