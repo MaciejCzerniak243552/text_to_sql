@@ -196,7 +196,7 @@ st.markdown(
     <style>
     :root {
         --header-height: 80px;
-        --header-offset: 12px;
+        --header-offset: 22px;
         --footer-height: 80px;
         --input-height: 90px;
         --sidebar-width: 15vw;
