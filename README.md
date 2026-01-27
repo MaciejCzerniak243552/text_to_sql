@@ -1,4 +1,4 @@
-# Query Assistant
+Ôªø# Query Assistant
 
 A Streamlit chat app that translates natural-language questions into SQL, runs them against a MySQL database, and returns a plain-language answer with optional charts.
 
@@ -24,9 +24,16 @@ python -m venv .venv
 # macOS/Linux
 # source .venv/bin/activate
 
-pip install -U streamlit langchain-ollama sqlalchemy mysqlclient
-# Optional (for charts)
-pip install -U pandas plotly
+pip install -r requirements.txt
+```
+
+MySQL driver (choose one):
+
+```bash
+# Option A (C-based, faster, may need system build tools)
+pip install mysqlclient
+# Option B (pure Python)
+pip install pymysql
 ```
 
 ## Configuration
@@ -66,7 +73,7 @@ streamlit run main.py
 
 ## Usage
 1. Ask a question in plain language.
-2. Use **Plot results** or mention ìplot/chart/line/barî to request a chart.
+2. Use **Plot results** or mention ‚Äúplot/chart/line/bar‚Äù to request a chart.
 3. Use **Show SQL** under a response to inspect the query.
 
 ## Chart Intent Rules (Summary)
