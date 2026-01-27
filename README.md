@@ -1,4 +1,4 @@
-﻿# Query Assistant
+# Query Assistant
 
 A Streamlit chat app that translates natural-language questions into SQL, runs them against a MySQL database, and returns a plain-language answer with optional charts.
 
