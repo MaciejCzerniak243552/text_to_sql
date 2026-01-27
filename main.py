@@ -267,7 +267,7 @@ st.markdown(
     .chat-scroll {
         overflow-y: auto;
         overflow-x: hidden;
-        height: calc(100vh - var(--header-height) - var(--footer-height) - var(--input-height));
+        height: calc(100vh - var(--header-height) - var(--st-header-height) - var(--footer-height) - var(--input-height));
         padding-right: 8px;
     }
     .fixed-footer {
