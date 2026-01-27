@@ -1,4 +1,4 @@
-"""Streamlit chat UI and orchestration for the text-to-SQL pipeline."""
+﻿"""Streamlit chat UI and orchestration for the text-to-SQL pipeline."""
 
 import base64
 import os
@@ -46,21 +46,28 @@ def render_sql_button(sql: str, index: int) -> None:
 # Initial assistant message shown when a new chat starts.
 DEFAULT_GREETING = {
     "role": "assistant",
+    "is_greeting": True,
     "content": (
-        "Hi!\n\n Ask questions about your database. "
-        "Examples:\n\n"
-        "• \"How many orders were placed last month?\"\n\n"
-        "• \"Calculate daily revenue for February 2025\"\n\n"
-        "• \"Top 5 categories by revenue\"\n\n"
-
-        "If you want a chart, say \"plot\", \"chart\", \"line\", or \"bar\", "
-        "or use the \"Plot results\" toggle. You can also follow up with "
-        "\"Now plot those results\". "
-        "If a question is unclear, I may ask for clarification.\n\n"
-        "Use the \"Show SQL\" expander to see the query behind each answer."
+        """
+        <div style="font-size:20px;font-weight:600;margin-bottom:6px;">Welcome to Query Assistant</div>
+        <div style="margin-bottom:8px;">Ask questions about your database. Examples:</div>
+        <ul style="margin-top:0;margin-bottom:8px;">
+          <li>How many orders were placed last month?</li>
+          <li>Calculate daily revenue for February 2025</li>
+          <li>Top 5 categories by revenue</li>
+        </ul>
+        <div style="margin-bottom:6px;">
+          If you want a chart, say <b>plot</b>, <b>chart</b>, <b>line</b>, or <b>bar</b>,
+          or use the <b>Plot results</b> toggle.
+        </div>
+        <div style="margin-bottom:6px;">
+          You can also follow up with "Now plot those results".
+          If a question is unclear, I may ask for clarification.
+        </div>
+        <div>Use the <b>Show SQL</b> expander to see the query behind each answer.</div>
+        """
     ),
 }
-
 
 st.set_page_config(page_title="Query Assistant", initial_sidebar_state="expanded", layout="wide")
 # Layout + scroll behavior is controlled via CSS so the chat history is the only scroller.
@@ -284,7 +291,10 @@ with chat_container:
     # Re-render chat history.
     for idx, message in enumerate(st.session_state.messages):
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            if message.get("is_greeting"):
+                st.markdown(message["content"], unsafe_allow_html=True)
+            else:
+                st.markdown(message["content"])
             # Only render extra details for assistant messages.
             if message["role"] == "assistant":
                 # Show prior rows if present.
@@ -435,3 +445,5 @@ if user_prompt:
                     "intent": intent,
                 }
             )
+
+
