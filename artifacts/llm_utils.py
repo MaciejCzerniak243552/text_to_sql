@@ -33,6 +33,8 @@ Revenue rules (when revenue is requested):
 - Use order_items price * quantity for gross revenue.
 - Use returns for refunds when needed; net = gross - refunds.
 - Avoid double counting refunds by aggregating returns per order_id first.
+- If the user asks for "revenue" without qualifiers, return gross revenue only
+  and name the column gross_revenue.
 
 Schema:
 {schema_details}
@@ -72,6 +74,8 @@ Revenue rules (when revenue is requested):
 - Use order_items price * quantity for gross revenue.
 - Use returns for refunds when needed; net = gross - refunds.
 - Avoid double counting refunds by aggregating returns per order_id first.
+- If the user asks for "revenue" without qualifiers, return gross revenue only
+  and name the column gross_revenue.
 
 Schema:
 {schema_details}
