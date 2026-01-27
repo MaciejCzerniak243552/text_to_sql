@@ -257,7 +257,7 @@ st.markdown(
         padding: 20px 20px;
     }
     .app-title {
-        font-size: 20px;
+        font-size: 25px;
         font-weight: 600;
         margin: 0;
     }
