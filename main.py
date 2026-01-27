@@ -132,7 +132,7 @@ def is_followup_plot_request(question: str) -> bool:
     """Detect short follow-up plot requests that refer to prior results."""
     text = question.lower()
     plot_words = r"\b(plot|chart|graph|visuali[sz]e|trend|line|bar|histogram|scatter|pie|draw|diagram)\b"
-    refer_words = r"\b(this|that|these|those|above|previous|last|prior|same)\b"
+    refer_words = r"\b(this|that|these|those|above|previous|prior|same)\b|\blast\s+(result|results|query|one)\b"
     return bool(re.search(plot_words, text) and re.search(refer_words, text))
 
 
