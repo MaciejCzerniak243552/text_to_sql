@@ -329,7 +329,7 @@ db_display_name = get_db_display_name(db_url)
 header_container = st.container()
 with header_container:
     st.markdown('<div id="header-anchor"></div>', unsafe_allow_html=True)
-    header_left, header_center, header_right = st.columns([1.2, 3, 1.2], vertical_alignment="center")
+    header_left, header_center, header_right_center, header_right = st.columns([1.2, 3, 0.6, 1.2], vertical_alignment="center")
     with header_left:
         st.markdown('')
     with header_center:
@@ -338,13 +338,14 @@ with header_container:
             f'<div class="app-meta">Model: {OLLAMA_MODEL} | Database: {db_display_name}</div>',
             unsafe_allow_html=True,
         )
-    with header_right:
+    with header_right_center:
         show_chart = st.toggle(
             "Plot results",
             value=False,
             key="show_chart",
             help="Force to render a chart for numeric results.",
         )
+    with header_right:
         if not charts_available():
             st.caption("Charts disabled until pandas and plotly are installed.")
         if st.button("Clear chat", use_container_width=True):
