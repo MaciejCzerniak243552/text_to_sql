@@ -1,10 +1,12 @@
+"""Streamlit chat UI and orchestration for the text-to-SQL pipeline."""
+
 import base64
 import os
 import re
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit
 
-# Text-to-SQL pipeline:
+# Text-to-SQL pipeline overview:
 # 1) Build schema context from the database.
 # 2) Ask the model for SQL (and fix it on errors).
 # 3) Execute the query, summarize the results, and render tables/charts.
@@ -173,6 +175,7 @@ def query_with_retries(
     return {"sql": sql, "rows": None, "error": f"Query failed: {last_error}"}
 
 
+# Initial assistant message shown when a new chat starts.
 DEFAULT_GREETING = {
     "role": "assistant",
     "content": (
@@ -192,6 +195,7 @@ DEFAULT_GREETING = {
 
 
 st.set_page_config(page_title="Query Assistant", initial_sidebar_state="expanded", layout="wide")
+# Layout + scroll behavior is controlled via CSS so the chat history is the only scroller.
 st.markdown(
     """
     <style>
@@ -438,6 +442,7 @@ components.html(
     <script>
     const start = Date.now();
     const timer = setInterval(() => {
+        // Attach CSS classes after the DOM is ready (Streamlit rebuilds often).
         const headerAnchor = window.parent.document.getElementById("header-anchor");
         if (headerAnchor) {
             const block = headerAnchor.closest('div[data-testid="stVerticalBlock"]');
@@ -472,6 +477,7 @@ if user_prompt:
     intent = parse_chart_intent(user_prompt, show_chart)
     last_result = get_last_result(st.session_state.messages)
     if intent["requested"] and last_result and is_followup_plot_request(user_prompt):
+        # Allow "plot that" follow-ups without re-querying the database.
         with chat_container:
             with st.chat_message("assistant"):
                 st.markdown("Here is the chart for the previous result.")

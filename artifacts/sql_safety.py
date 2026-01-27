@@ -1,3 +1,5 @@
+"""Safety checks to keep generated SQL read-only and schema-bound."""
+
 import re
 from typing import Dict, List
 

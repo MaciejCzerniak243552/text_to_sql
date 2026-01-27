@@ -1,3 +1,5 @@
+"""LLM prompt templates and helpers for SQL generation and answer wording."""
+
 import json
 import re
 from datetime import date, datetime

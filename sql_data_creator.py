@@ -112,6 +112,7 @@ def money(x: float) -> float:
 
 
 def weighted_choice(weight_map: Dict[int, float]) -> int:
+    """Pick a key based on weighted probabilities."""
     items = list(weight_map.items())
     values = [k for k, _ in items]
     weights = [w for _, w in items]
@@ -119,17 +120,20 @@ def weighted_choice(weight_map: Dict[int, float]) -> int:
 
 
 def weighted_status() -> str:
+    """Sample an order status using STATUS_WEIGHTS."""
     values = [s for s, _ in STATUS_WEIGHTS]
     weights = [w for _, w in STATUS_WEIGHTS]
     return random.choices(values, weights=weights, k=1)[0]
 
 
 def rand_date(start: date, end: date) -> date:
+    """Return a random date between start and end (inclusive)."""
     span = (end - start).days
     return start + timedelta(days=random.randint(0, span))
 
 
 def clamp(d: date, start: date, end: date) -> date:
+    """Clamp a date to the provided [start, end] range."""
     if d < start:
         return start
     if d > end:
@@ -147,7 +151,8 @@ def jitter_price(base: float) -> float:
 # DATA GENERATION
 # =========================
 def build_dataset(n_orders: int):
-    """
+    """Generate in-memory rows for orders, order_items, and returns.
+
     Returns:
       orders_rows: list[dict] for INSERT into orders (no order_id)
       items_rows: list[dict] for INSERT into order_items (no id)
@@ -239,9 +244,9 @@ def build_dataset(n_orders: int):
 # DB OPS
 # =========================
 def clear_tables_keep_structure(conn) -> None:
-    """
-    Clear rows only (keep schema). Child tables first.
-    Reset AUTO_INCREMENT so order_id becomes 1..N for deterministic linking.
+    """Clear rows only (keep schema) and reset AUTO_INCREMENT counters.
+
+    Child tables are cleared first to satisfy foreign key constraints.
     """
     conn.execute(text("DELETE FROM returns;"))
     conn.execute(text("DELETE FROM order_items;"))
@@ -254,6 +259,7 @@ def clear_tables_keep_structure(conn) -> None:
 
 
 def main() -> None:
+    """Connect to the database and seed the demo dataset."""
     if not DB_URL:
         raise SystemExit(
             "DB_URL is not set.\n"

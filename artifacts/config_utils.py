@@ -1,3 +1,5 @@
+"""Configuration helpers for environment variables and Streamlit secrets."""
+
 import os
 import re
 import urllib.parse

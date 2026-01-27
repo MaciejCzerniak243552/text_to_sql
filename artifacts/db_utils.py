@@ -1,3 +1,5 @@
+"""Database utilities for schema discovery and query execution."""
+
 from typing import Any, Dict, List, Tuple
 
 import streamlit as st

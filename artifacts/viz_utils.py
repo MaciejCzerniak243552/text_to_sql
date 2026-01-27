@@ -1,3 +1,5 @@
+"""Visualization helpers for tables and optional Plotly charts."""
+
 import re
 from typing import Any, Dict, List, Optional
 
