@@ -196,6 +196,7 @@ st.markdown(
     <style>
     :root {
         --header-height: 80px;
+        --header-offset: 12px;
         --footer-height: 80px;
         --input-height: 90px;
         --sidebar-width: 15vw;
@@ -217,7 +218,7 @@ st.markdown(
         height: 100%;
         overflow: hidden;
         overflow-x: hidden;
-        padding-top: var(--header-height);
+        padding-top: calc(var(--header-height) + var(--header-offset));
         padding-bottom: var(--footer-height);
         box-sizing: border-box;
     }
@@ -247,7 +248,7 @@ st.markdown(
     }
     .app-header {
         position: fixed;
-        top: 0;
+        top: var(--header-offset);
         left: 0;
         width: 100%;
         z-index: 1000;
@@ -267,7 +268,7 @@ st.markdown(
     .chat-scroll {
         overflow-y: auto;
         overflow-x: hidden;
-        height: calc(95vh - var(--header-height) - var(--footer-height) - var(--input-height));
+        height: calc(100vh - var(--header-height) - var(--header-offset) - var(--footer-height) - var(--input-height));
         padding-right: 8px;
     }
     .fixed-footer {
