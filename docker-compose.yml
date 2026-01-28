@@ -24,7 +24,7 @@ services:
   nginx:
     image: nginx:1.27-alpine
     ports:
-      - "8000:80"
+      - "8080:80"
     depends_on:
       app:
         condition: service_healthy
