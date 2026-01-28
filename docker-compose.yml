@@ -8,12 +8,11 @@ services:
     environment:
       STREAMLIT_SERVER_ADDRESS: 0.0.0.0
       STREAMLIT_SERVER_PORT: 8502
-      STREAMLIT_SERVER_BASE_URL_PATH: chat
       STREAMLIT_SERVER_HEADLESS: "true"
       STREAMLIT_BROWSER_GATHER_USAGE_STATS: "false"
       PYTHONUNBUFFERED: "1"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8502/chat/_stcore/health"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8502/_stcore/health"]
       interval: 30s
       timeout: 5s
       retries: 5
