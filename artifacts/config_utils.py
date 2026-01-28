@@ -80,7 +80,3 @@ def build_db_url() -> Optional[str]:
     return f"{dialect}://{auth}{hostport}/{name}"
 
 
-# Redact passwords before printing.
-def mask_db_url(url: str) -> str:
-    """Hide DB password when showing the URL in the UI."""
-    return re.sub(r":([^:@/]+)@", ":****@", url)

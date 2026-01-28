@@ -94,14 +94,12 @@ def sql_safety_reason(sql: str, schema: Dict[str, List[str]]) -> str:
     return ""
 
 
-def is_safe_sql(sql: str, schema: Dict[str, List[str]]) -> bool:
-    """Validate that SQL is read-only and targets only known tables."""
-    return sql_safety_reason(sql, schema) == ""
-
-
 # Default safety cap on result size.
 def ensure_limit(sql: str, limit: int = 200, chart_mode: bool = False) -> str:
     """Add a LIMIT if the query doesn't already specify one."""
+    # A non-positive limit disables auto-limiting.
+    if limit <= 0:
+        return sql
     if chart_mode:
         # Ensure deterministic ordering for time series output.
         if not re.search(r"\border\s+by\b", sql, flags=re.IGNORECASE):

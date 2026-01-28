@@ -11,14 +11,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --upgrade pip \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --upgrade pip \
     && pip install -r requirements.txt pymysql
 
 COPY . .
 
 EXPOSE 8502
 
-ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
-ENV STREAMLIT_SERVER_PORT=8502
+HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=5 \
+    CMD curl -fsS http://localhost:8502/_stcore/health || exit 1
 
 CMD ["streamlit", "run", "main.py"]

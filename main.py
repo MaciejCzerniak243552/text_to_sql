@@ -2,7 +2,7 @@
 
 import base64
 import os
-from typing import Any, Dict, List, Optional
+from typing import Optional
 
 # Text-to-SQL pipeline overview:
 # 1) Build schema context from the database.
