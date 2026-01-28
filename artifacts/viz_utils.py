@@ -1,11 +1,7 @@
-"""Visualization helpers for tables and optional Plotly charts."""
-
-import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import streamlit as st
 
-# Optional deps for nicer tables/charts.
 try:
     import pandas as pd
 except ImportError:
@@ -13,172 +9,202 @@ except ImportError:
 
 try:
     import plotly.express as px
+    import plotly.graph_objects as go
 except ImportError:
     px = None
+    go = None
+
+
+# Professional color palette
+COLORS = {
+    "primary": "#3b82f6",
+    "secondary": "#6366f1", 
+    "success": "#10b981",
+    "warning": "#f59e0b",
+    "error": "#ef4444",
+    "neutral": "#64748b",
+}
+
+CHART_COLORS = [
+    "#3b82f6",  # Blue
+    "#10b981",  # Green
+    "#f59e0b",  # Amber
+    "#8b5cf6",  # Purple
+    "#ec4899",  # Pink
+    "#06b6d4",  # Cyan
+    "#f97316",  # Orange
+    "#84cc16",  # Lime
+]
+
+# Dark theme for Plotly charts
+CHART_LAYOUT = {
+    "template": "plotly_dark",
+    "paper_bgcolor": "rgba(0,0,0,0)",
+    "plot_bgcolor": "rgba(26,31,46,0.8)",
+    "font": {"family": "Source Sans Pro, sans-serif", "color": "#a0aec0"},
+    "title": {"font": {"size": 16, "color": "#fafafa"}},
+    "legend": {"bgcolor": "rgba(0,0,0,0)", "font": {"size": 12}},
+    "xaxis": {
+        "gridcolor": "rgba(45,55,72,0.6)",
+        "linecolor": "rgba(45,55,72,0.8)",
+        "tickfont": {"size": 11},
+    },
+    "yaxis": {
+        "gridcolor": "rgba(45,55,72,0.6)",
+        "linecolor": "rgba(45,55,72,0.8)",
+        "tickfont": {"size": 11},
+    },
+    "margin": {"l": 60, "r": 30, "t": 40, "b": 50},
+}
 
 
 def charts_available() -> bool:
-    """Return True when both pandas and plotly are installed."""
+    """Check if charting libraries are available."""
     return pd is not None and px is not None
 
 
-# Detect datetime-like columns for better charts.
 def coerce_datetime_columns(df):
-    """Convert object columns to datetimes when they look date-like."""
-    # Skip conversion if pandas is not available.
+    """Convert columns that look like dates to datetime."""
     if pd is None:
         return df
-    # Inspect each column for datetime-like values.
     for col in df.columns:
         if df[col].dtype == "object":
             parsed = pd.to_datetime(df[col], errors="coerce")
-            # Treat column as datetime if most values parse cleanly.
             if parsed.notna().mean() >= 0.8:
                 df[col] = parsed
     return df
 
 
-def coerce_numeric_columns(df):
-    """Convert object columns to numeric when they look numeric-like."""
+def format_value(val, col_name: str = "") -> str:
+    """Format values for display."""
     if pd is None:
-        return df
-    for col in df.columns:
-        if df[col].dtype == "object":
-            series = df[col].astype(str).str.strip()
-            # Skip columns that contain letters (e.g., "2024-Q1") to preserve bucket labels.
-            if series.str.contains(r"[A-Za-z]", regex=True, na=False).mean() >= 0.1:
-                continue
-            parsed = pd.to_numeric(series, errors="coerce")
-            if parsed.notna().mean() >= 0.8:
-                df[col] = parsed
-                continue
-            cleaned = series.str.replace(r"[,\s$]", "", regex=True)
-            cleaned = cleaned.str.replace(r"[A-Za-z]", "", regex=True)
-            parsed = pd.to_numeric(cleaned, errors="coerce")
-            if parsed.notna().mean() >= 0.8:
-                df[col] = parsed
-    return df
+        return str(val)
+    if pd.isna(val):
+        return "—"
+    
+    col_lower = col_name.lower()
+    
+    # Currency formatting
+    if any(term in col_lower for term in ["price", "amount", "total", "revenue", "cost", "value"]):
+        try:
+            return f"${float(val):,.2f}"
+        except (ValueError, TypeError):
+            return str(val)
+    
+    # Percentage formatting
+    if "percent" in col_lower or "rate" in col_lower:
+        try:
+            return f"{float(val):.1f}%"
+        except (ValueError, TypeError):
+            return str(val)
+    
+    # Large number formatting
+    if isinstance(val, (int, float)) and not isinstance(val, bool):
+        if abs(val) >= 1_000_000:
+            return f"{val:,.0f}"
+        elif abs(val) >= 1_000:
+            return f"{val:,.0f}"
+        elif isinstance(val, float):
+            return f"{val:.2f}"
+    
+    return str(val)
 
 
-# Pick a reasonable chart (line for time series, bar otherwise).
-def build_chart(df, intent: Optional[Dict[str, Any]] = None):
-    """Build a plotly chart from the dataframe when possible."""
-    # Charts require pandas, plotly, and at least one row.
+def build_chart(df):
+    """Build a styled Plotly chart."""
     if pd is None or px is None or df.empty:
         return None
+    
     df = coerce_datetime_columns(df.copy())
-    df = coerce_numeric_columns(df)
     numeric_cols = df.select_dtypes(include="number").columns.tolist()
-    # No numeric columns means no sensible chart.
+    
     if not numeric_cols:
         return None
 
+    # Find x-axis column
     x_col = None
-    # Pick the first non-numeric column as the x-axis.
     for col in df.columns:
         if col not in numeric_cols:
             x_col = col
             break
-    # Fall back to a synthetic index when all columns are numeric.
+    
     if x_col is None:
-        time_candidates = [col for col in df.columns if re.search(r"(date|day|month|year|time)", col, re.I)]
-        if time_candidates:
-            candidate = time_candidates[0]
-            remaining = [col for col in numeric_cols if col != candidate]
-            if remaining:
-                x_col = candidate
-                numeric_cols = remaining
-        if x_col is None:
-            df = df.reset_index(drop=True)
-            df["index"] = df.index
-            x_col = "index"
+        df = df.reset_index(drop=True)
+        df["Index"] = df.index
+        x_col = "Index"
 
-    chart_type = (intent or {}).get("chart_type", "auto")
-    grain = (intent or {}).get("grain", "auto")
-    requested_x = (intent or {}).get("x", "auto")
-    requested_y = (intent or {}).get("y", "auto")
-
-    if requested_x != "auto" and requested_x in df.columns:
-        x_col = requested_x
-    elif grain != "auto" and grain != "none":
-        datetime_candidates = [
-            col for col in df.columns if pd.api.types.is_datetime64_any_dtype(df[col])
-        ]
-        if datetime_candidates:
-            x_col = datetime_candidates[0]
-
-    if requested_y != "auto" and requested_y in numeric_cols:
-        y_cols = requested_y
+    # Choose chart type
+    is_timeseries = pd.api.types.is_datetime64_any_dtype(df[x_col])
+    
+    if is_timeseries:
+        fig = px.line(
+            df, x=x_col, y=numeric_cols,
+            color_discrete_sequence=CHART_COLORS
+        )
+        fig.update_traces(line={"width": 2})
     else:
-        preferred = ["net_revenue", "gross_revenue", "refunds", "revenue", "total"]
-        y_cols = None
-        for candidate in preferred:
-            for col in numeric_cols:
-                if col.lower() == candidate:
-                    y_cols = col
-                    break
-            if y_cols:
-                break
-        if y_cols is None:
-            y_cols = numeric_cols if len(numeric_cols) > 1 else numeric_cols[0]
-
-    if x_col and pd.api.types.is_datetime64_any_dtype(df[x_col]):
-        df = df.sort_values(x_col)
-    elif x_col and intent and intent.get("grain") in {"quarter", "month", "week"}:
-        # Preserve categorical bucket labels for quarters/months/weeks.
-        df[x_col] = df[x_col].astype(str)
-
-    if chart_type == "auto":
-        if x_col and pd.api.types.is_datetime64_any_dtype(df[x_col]):
-            chart_type = "line"
-        else:
-            chart_type = "bar"
-
-    if chart_type == "scatter":
-        if len(numeric_cols) < 2:
-            return None
-        return px.scatter(df, x=numeric_cols[0], y=numeric_cols[1])
-    if chart_type == "hist":
-        return px.histogram(df, x=y_cols if isinstance(y_cols, str) else numeric_cols[0])
-    if chart_type == "pie":
-        if x_col is None:
-            x_col = df.columns[0]
-        y_value = y_cols if isinstance(y_cols, str) else numeric_cols[0]
-        return px.pie(df, names=x_col, values=y_value)
-    if chart_type == "line":
-        return px.line(df, x=x_col, y=y_cols)
-    if chart_type == "bar":
-        if isinstance(y_cols, list):
-            y_cols = y_cols[0]
-        return px.bar(df, x=x_col, y=y_cols)
-    return None
+        y_cols = numeric_cols if len(numeric_cols) > 1 else numeric_cols[0]
+        fig = px.bar(
+            df, x=x_col, y=y_cols,
+            color_discrete_sequence=CHART_COLORS,
+            barmode="group"
+        )
+        fig.update_traces(marker={"line": {"width": 0}})
+    
+    # Apply professional styling
+    fig.update_layout(**CHART_LAYOUT)
+    fig.update_layout(
+        height=400,
+        showlegend=len(numeric_cols) > 1,
+        hovermode="x unified",
+    )
+    
+    return fig
 
 
-# Render tabular data plus an optional chart.
-def render_results(
-    rows: List[Dict[str, Any]],
-    show_chart: bool = False,
-    intent: Optional[Dict[str, Any]] = None,
-    key_prefix: Optional[str] = None,
-) -> None:
-    """Display results as a table and an optional chart."""
-    # Show rows if we have any.
-    if rows:
-        # Without pandas, render the list of dicts directly.
-        if pd is None:
-            st.dataframe(rows, use_container_width=True, key=f"{key_prefix}-table" if key_prefix else None)
-            return
-        df = pd.DataFrame(rows)
-        st.dataframe(df, use_container_width=True, key=f"{key_prefix}-table" if key_prefix else None)
-        # Only render a chart when explicitly requested.
-        should_plot = intent.get("requested") if intent else show_chart
-        if should_plot:
-            fig = build_chart(df, intent=intent)
-            if fig is not None:
-                st.plotly_chart(fig, use_container_width=True, key=f"{key_prefix}-chart" if key_prefix else None)
-            else:
-                st.caption(
-                    "Chart not available. Provide a time/category column and at least one numeric column."
-                )
-    else:
-        st.info("No rows returned.")
+def render_results(rows: List[Dict[str, Any]], show_chart: bool = False) -> None:
+    """Display results as a styled table and optional chart."""
+    if not rows:
+        st.info("No results found.")
+        return
+    
+    if pd is None:
+        st.dataframe(rows, use_container_width=True)
+        return
+    
+    df = pd.DataFrame(rows)
+    
+    # Configure column formatting
+    column_config = {}
+    for col in df.columns:
+        col_lower = col.lower()
+        
+        if any(term in col_lower for term in ["price", "amount", "total", "revenue", "cost", "value"]):
+            column_config[col] = st.column_config.NumberColumn(
+                col,
+                format="$%.2f"
+            )
+        elif "percent" in col_lower or "rate" in col_lower:
+            column_config[col] = st.column_config.NumberColumn(
+                col,
+                format="%.1f%%"
+            )
+        elif "date" in col_lower or "time" in col_lower:
+            column_config[col] = st.column_config.DatetimeColumn(
+                col,
+                format="YYYY-MM-DD"
+            )
+    
+    # Display table
+    st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        column_config=column_config
+    )
+    
+    # Display chart
+    if show_chart:
+        fig = build_chart(df)
+        if fig is not None:
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
