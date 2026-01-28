@@ -1,449 +1,458 @@
-﻿"""Streamlit chat UI and orchestration for the text-to-SQL pipeline."""
-
-import base64
+import json
 import os
+import re
 from typing import Any, Dict, List, Optional
-
-# Text-to-SQL pipeline overview:
-# 1) Build schema context from the database.
-# 2) Ask the model for SQL (and fix it on errors).
-# 3) Execute the query, summarize the results, and render tables/charts.
+from urllib.parse import urlsplit
 
 import streamlit as st
-import streamlit.components.v1 as components
 from langchain_ollama.llms import OllamaLLM
 
 from artifacts.config_utils import build_db_url, get_setting, load_dotenv_file
-from artifacts.chat_utils import (
-    get_db_display_name,
-    get_last_result,
-    is_followup_plot_request,
-    needs_clarification,
-    parse_chart_intent,
-    query_with_retries,
-)
-from artifacts.db_utils import extract_schema
-from artifacts.llm_utils import generate_answer, infer_range_answer
+from artifacts.db_utils import extract_schema, run_query
+from artifacts.llm_utils import fix_sql_query, generate_answer, infer_range_answer, to_sql_query
+from artifacts.sql_safety import ensure_limit, is_safe_sql
 from artifacts.viz_utils import charts_available, render_results
 
-# Load environment variables from a local .env file when present.
 load_dotenv_file(os.getenv("DOTENV_PATH", ".env"))
 
-
-@st.cache_resource(show_spinner=False)
-def get_ollama_client(model_name: str, base_url: Optional[str]) -> OllamaLLM:
-    """Cache the Ollama client so models stay warm across Streamlit reruns."""
-    if base_url:
-        return OllamaLLM(model=model_name, base_url=base_url)
-    return OllamaLLM(model=model_name)
-
-
-def render_sql_button(sql: str, index: int) -> None:
-    """Show SQL without triggering a rerun that cancels in-flight work."""
-    with st.expander("Show SQL"):
-        st.code(sql, wrap_lines=True, language="sql")
-
-# Initial assistant message shown when a new chat starts.
-DEFAULT_GREETING = {
-    "role": "assistant",
-    "is_greeting": True,
-    "content": (
-        """
-        <div style="font-size:20px;font-weight:600;margin-bottom:6px;">Welcome to Query Assistant</div>
-        <div style="margin-bottom:8px;">Ask questions about your database. Examples:</div>
-        <ul style="margin-top:0;margin-bottom:8px;">
-          <li>How many orders were placed last month?</li>
-          <li>Calculate daily revenue for February 2025</li>
-          <li>Top 5 categories by revenue</li>
-        </ul>
-        <div style="margin-bottom:6px;">
-          If you want a chart, say <b>plot</b>, <b>chart</b>, <b>line</b>, or <b>bar</b>,
-          or use the <b>Plot results</b> toggle.
-        </div>
-        <div style="margin-bottom:6px;">
-          You can also follow up with "Now plot those results".
-          If a question is unclear, I may ask for clarification.
-        </div>
-        <div>Use the <b>Show SQL</b> expander to see the query behind each answer.</div>
-        """
-    ),
-}
-
-st.set_page_config(page_title="Query Assistant", initial_sidebar_state="expanded", layout="wide")
-# Layout + scroll behavior is controlled via CSS so the chat history is the only scroller.
-st.markdown(
-    """
-    <style>
-    :root {
-        --header-height: 110px;
-        --header-offset: 40px;
-        --footer-height: 80px;
-        --input-height: 90px;
-        --sidebar-width: 16vw;
-    }
-    * {
-        box-sizing: border-box;
-    }
-    html, body, [data-testid="stAppViewContainer"] {
-        height: 100%;
-        overflow: hidden;
-        overflow-x: hidden;
-    }
-    section.main {
-        height: 100vh;
-        overflow: hidden;
-        overflow-x: hidden;
-    }
-    section.main > div {
-        height: 100%;
-        overflow: hidden;
-        overflow-x: hidden;
-        padding-top: calc(var(--header-height) + var(--header-offset));
-        padding-bottom: var(--footer-height);
-        box-sizing: border-box;
-    }
-    [data-testid="collapsedControl"] {
-        display: none;
-    }
-    [data-testid="stSidebarCollapseButton"] {
-        display: none;
-    }
-    button[title="Close sidebar"],
-    button[title="Open sidebar"],
-    button[aria-label="Close sidebar"],
-    button[aria-label="Open sidebar"] {
-        display: none;
-    }
-    [data-testid="stSidebarResizer"] {
-        display: none !important;
-    }
-    section[data-testid="stSidebar"] {
-        width: var(--sidebar-width) !important;
-        min-width: var(--sidebar-width) !important;
-        max-width: var(--sidebar-width) !important;
-        flex: 0 0 var(--sidebar-width) !important;
-    }
-    section[data-testid="stSidebar"] > div:first-child {
-        width: var(--sidebar-width) !important;
-    }
-    .app-header {
-        position: fixed;
-        top: var(--header-offset);
-        left: 0;
-        width: 100%;
-        z-index: 1000;
-        background: var(--background-color, white);
-        border-bottom: 1px solid #ddd;
-        padding: 20px 20px;
-    }
-    .app-title {
-        font-size: 25px;
-        font-weight: 600;
-        margin: 0;
-    }
-    .app-meta {
-        color: rgba(0, 0, 0, 0.6);
-        font-size: 0.85rem;
-    }
-    .chat-scroll {
-        overflow-y: auto;
-        overflow-x: hidden;
-        height: calc(100vh - var(--header-height) - var(--header-offset) - var(--footer-height) - var(--input-height));
-        padding-right: 8px;
-    }
-    .fixed-footer {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        background-color: white;
-        z-index: 1000;
-        padding: 10px 20px;
-        border-top: 1px solid #ddd;
-        text-align: center;
-    }
-    div[data-testid="stChatInput"] {
-        position: sticky;
-        bottom: var(--footer-height);
-        background: var(--background-color, white);
-        padding-top: 8px;
-    }
-    .stPlotlyChart, .plot-container, .js-plotly-plot {
-        max-width: 100% !important;
-    }
-    div[data-testid="stDataFrame"] {
-        max-width: 100% !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
+# ─────────────────────────────────────────────────────────────────────────────
+# Page Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+st.set_page_config(
+    page_title="Query Assistant",
+    page_icon="🔍",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# Model and retry settings.
+# ─────────────────────────────────────────────────────────────────────────────
+# Professional Dark Theme
+# ─────────────────────────────────────────────────────────────────────────────
+st.markdown("""
+<style>
+    /* Import clean professional font */
+    @import url('https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap');
+    
+    /* Root variables */
+    :root {
+        --bg-primary: #0e1117;
+        --bg-secondary: #1a1f2e;
+        --bg-tertiary: #252b3b;
+        --text-primary: #fafafa;
+        --text-secondary: #a0aec0;
+        --accent: #3b82f6;
+        --accent-hover: #2563eb;
+        --success: #10b981;
+        --error: #ef4444;
+        --border: #2d3748;
+    }
+    
+    /* Global font */
+    html, body, [class*="css"] {
+        font-family: 'Source Sans Pro', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    
+    /* Hide Streamlit branding */
+    #MainMenu, footer, header[data-testid="stHeader"] {
+        display: none !important;
+    }
+    
+    /* Main container */
+    .stApp {
+        background: var(--bg-primary);
+    }
+    
+    /* Sidebar styling */
+    section[data-testid="stSidebar"] {
+        background: var(--bg-secondary);
+        border-right: 1px solid var(--border);
+    }
+    
+    section[data-testid="stSidebar"] .stMarkdown {
+        color: var(--text-secondary);
+    }
+    
+    /* Sidebar header */
+    section[data-testid="stSidebar"] h1,
+    section[data-testid="stSidebar"] h2,
+    section[data-testid="stSidebar"] h3 {
+        color: var(--text-primary) !important;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+    }
+    
+    /* Expander styling */
+    .streamlit-expanderHeader {
+        background: var(--bg-tertiary) !important;
+        border-radius: 6px;
+        font-weight: 500;
+    }
+    
+    .streamlit-expanderContent {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-top: none;
+        border-radius: 0 0 6px 6px;
+    }
+    
+    /* Chat messages */
+    .stChatMessage {
+        background: var(--bg-secondary) !important;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+    }
+    
+    /* Chat input */
+    .stChatInput > div {
+        background: var(--bg-secondary) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: 8px;
+    }
+    
+    .stChatInput input {
+        color: var(--text-primary) !important;
+    }
+    
+    /* Buttons */
+    .stButton > button {
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    
+    .stButton > button:hover {
+        background: var(--accent);
+        border-color: var(--accent);
+    }
+    
+    /* Toggle */
+    .stCheckbox label span {
+        color: var(--text-secondary) !important;
+    }
+    
+    /* Dataframe */
+    .stDataFrame {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    
+    /* Code blocks */
+    .stCodeBlock {
+        background: var(--bg-tertiary) !important;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+    }
+    
+    /* Headers */
+    h1, h2, h3 {
+        color: var(--text-primary) !important;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+    }
+    
+    /* Spinner */
+    .stSpinner > div {
+        border-color: var(--accent) transparent transparent transparent !important;
+    }
+    
+    /* Info/Error boxes */
+    .stAlert {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+    }
+    
+    /* Custom header styling */
+    .main-header {
+        padding: 1.5rem 0 1rem 0;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 1.5rem;
+    }
+    
+    .main-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin: 0;
+        letter-spacing: -0.03em;
+    }
+    
+    .main-subtitle {
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+    }
+    
+    /* Status indicator */
+    .status-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        background: var(--success);
+        border-radius: 50%;
+        margin-right: 6px;
+        animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    
+    /* Clean scrollbar */
+    ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: var(--bg-primary);
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 3px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: var(--text-secondary);
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helper Functions
+# ─────────────────────────────────────────────────────────────────────────────
+def wants_chart(question: str) -> bool:
+    """Detect if user wants a visualization."""
+    return bool(re.search(
+        r"\b(plot|chart|graph|visuali[sz]e|trend|line|bar|histogram|scatter|pie|diagram)\b",
+        question, re.I
+    ))
+
+
+def get_db_display_name(db_url: str) -> str:
+    """Return a friendly database name."""
+    name = get_setting("DB_NAME")
+    if name:
+        return name
+    if db_url.startswith("sqlite"):
+        path = db_url.split("///", 1)[-1]
+        return os.path.basename(path) or "SQLite"
+    parsed = urlsplit(db_url)
+    return parsed.path.lstrip("/") if parsed.path else "Database"
+
+
+def needs_clarification(question: str, schema: Dict[str, List[str]]) -> Optional[str]:
+    """Check if question needs more detail."""
+    tokens = re.findall(r"[a-zA-Z_][a-zA-Z0-9_]*", question.lower())
+    if len(tokens) < 3:
+        return "Could you provide more detail about what you'd like to know?"
+    
+    schema_terms = {name.lower() for name in schema.keys()}
+    for cols in schema.values():
+        schema_terms.update(col.lower() for col in cols)
+    
+    mentions_schema = any(tok in schema_terms for tok in tokens)
+    generic = {"show", "list", "data", "info", "details", "report", "stats", "summary", "everything", "all", "overview"}
+    has_generic = any(tok in generic for tok in tokens)
+    has_filter = any(
+        tok in {"count", "average", "avg", "min", "max", "sum", "total", "range", "between", 
+                "before", "after", "since", "during", "latest", "last", "top", "bottom", "most", "least"}
+        for tok in tokens
+    ) or bool(re.search(r"\d", question))
+    
+    if has_generic and not mentions_schema and not has_filter:
+        tables = sorted(schema.keys())[:3]
+        if tables:
+            return f"Could you be more specific? Try asking about: {', '.join(tables)}"
+        return "Could you specify what data you're looking for?"
+    return None
+
+
+def render_sql(sql: str, index: int) -> None:
+    """Display SQL in expander."""
+    with st.expander("View SQL", expanded=False):
+        st.code(sql, language="sql")
+
+
+def query_with_retries(
+    query: str,
+    schema_details: str,
+    schema: Dict[str, List[str]],
+    db_url: str,
+    model: OllamaLLM,
+    limit: int,
+    max_retries: int,
+) -> Dict[str, Any]:
+    """Generate and execute SQL with retry logic."""
+    sql = to_sql_query(query, schema_details, model)
+    seen_sql = set()
+    last_error = None
+
+    for attempt in range(max_retries + 1):
+        sql = ensure_limit(sql, limit=limit)
+        
+        if not is_safe_sql(sql, schema):
+            return {"sql": sql, "rows": None, "error": "Query validation failed."}
+        
+        if sql in seen_sql:
+            return {"sql": sql, "rows": None, "error": "Could not generate a working query."}
+        seen_sql.add(sql)
+        
+        try:
+            rows = run_query(db_url, sql)
+            return {"sql": sql, "rows": rows, "error": None}
+        except Exception as exc:
+            last_error = str(exc)
+            if attempt >= max_retries:
+                break
+            sql = fix_sql_query(query, schema_details, sql, last_error, model)
+
+    return {"sql": sql, "rows": None, "error": f"Query failed: {last_error}"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Configuration
+# ─────────────────────────────────────────────────────────────────────────────
 OLLAMA_MODEL = get_setting("OLLAMA_MODEL")
 OLLAMA_BASE_URL = get_setting("OLLAMA_BASE_URL") or get_setting("OLLAMA_HOST")
 
 if not OLLAMA_MODEL:
-    st.error("OLLAMA_MODEL is missing. Set it in .env or .streamlit/secrets.toml.")
+    st.error("Missing OLLAMA_MODEL configuration.")
     st.stop()
 
-# Use a remote Ollama base URL when configured; otherwise default to local.
-model = get_ollama_client(OLLAMA_MODEL, OLLAMA_BASE_URL)
+model = OllamaLLM(model=OLLAMA_MODEL, base_url=OLLAMA_BASE_URL) if OLLAMA_BASE_URL else OllamaLLM(model=OLLAMA_MODEL)
 
 QUERY_LIMIT = int(get_setting("QUERY_LIMIT", "200"))
 SQL_MAX_RETRIES = int(get_setting("SQL_MAX_RETRIES", "2"))
 
-# Resolve DB connection info.
 db_url = build_db_url()
-# Stop early if we cannot build a valid DB URL.
 if not db_url:
-    st.error(
-        "Database settings are missing. Set DB_URL or DB_HOST/DB_USER/DB_PASSWORD/DB_NAME."
-    )
+    st.error("Database configuration missing.")
     st.stop()
 
-db_display_name = get_db_display_name(db_url)
-header_container = st.container()
-with header_container:
-    st.markdown('<div id="header-anchor"></div>', unsafe_allow_html=True)
-    header_left, header_center, header_right_center, header_right = st.columns([0.9, 3, 0.6, 1.2], vertical_alignment="center")
-    with header_left:
-        st.markdown('')
-    with header_center:
-        st.markdown('<div class="app-title">Query Assistant</div>', unsafe_allow_html=True)
-        st.markdown(
-            f'<div class="app-meta">Model: {OLLAMA_MODEL} | Database: {db_display_name}</div>',
-            unsafe_allow_html=True,
-        )
-    with header_right_center:
-        show_chart = st.toggle(
-            "Plot results",
-            value=False,
-            key="show_chart",
-            help="Force to render a chart for numeric results.",
-        )
-    with header_right:
-        if not charts_available():
-            st.caption("Charts disabled until pandas and plotly are installed.")
-        if st.button("Clear chat", use_container_width=True):
-            st.session_state.messages = [DEFAULT_GREETING]
-            st.rerun()
+db_name = get_db_display_name(db_url)
 
-st.markdown(
-    """
-    <div class="fixed-footer">
-        <p>(c) 2026 My App</p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-# Load schema once for the prompt and safety checks.
 try:
-    schema, schema_details = extract_schema(db_url)
+    schema = extract_schema(db_url)
+    schema_details = json.dumps(schema, ensure_ascii=True)
 except Exception as exc:
-    st.error(f"Could not load schema: {exc}")
+    st.error(f"Could not connect to database: {exc}")
     st.stop()
 
-# Sidebar logo at the top.
-logo_path = os.path.join(os.path.dirname(__file__), "img", "alternate.png")
-try:
-    with open(logo_path, "rb") as handle:
-        logo_b64 = base64.b64encode(handle.read()).decode("utf-8")
-    st.sidebar.markdown(
-        f"""
-        <style>
-        .sidebar-logo {{
-            text-align: center;
-            margin: 4px 0 12px;
-        }}
-        .sidebar-logo img {{
-            width: 100%;
-            height: auto;
-            border: 0px solid #4FC3F7;
-        }}
-        </style>
-        <div class="sidebar-logo">
-            <a href="https://alternate.nl" target="_blank" rel="noopener noreferrer">
-                <img src="data:image/png;base64,{logo_b64}" alt="alternate.nl" />
-            </a>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-except FileNotFoundError:
-    pass
+# ─────────────────────────────────────────────────────────────────────────────
+# Sidebar
+# ─────────────────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("### Database Schema")
+    st.caption(f"Connected to **{db_name}**")
+    
+    for table_name in sorted(schema.keys()):
+        with st.expander(f"📋 {table_name}"):
+            for col in schema[table_name]:
+                st.markdown(f"• `{col}`")
+    
+    st.divider()
+    
+    # Controls
+    show_chart = st.toggle("Show visualizations", value=False, help="Display charts for numeric results")
+    
+    if st.button("Clear conversation", use_container_width=True):
+        st.session_state.messages = []
+        st.rerun()
+    
+    st.divider()
+    st.caption(f"Model: `{OLLAMA_MODEL}`")
 
-# Sidebar schema browser.
-st.sidebar.header("Database schema")
-st.sidebar.caption("Click a table to see its columns.")
-for table_name in sorted(schema.keys()):
-    with st.sidebar.expander(table_name):
-        st.markdown("\n".join(f"- {col}" for col in schema[table_name]))
+# ─────────────────────────────────────────────────────────────────────────────
+# Main Content
+# ─────────────────────────────────────────────────────────────────────────────
+st.markdown("""
+<div class="main-header">
+    <div class="main-title">Query Assistant</div>
+    <div class="main-subtitle">
+        <span class="status-dot"></span>
+        Ask questions about your data in natural language
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
-chat_container = st.container()
-with chat_container:
-    st.markdown('<div id="chat-scroll-anchor"></div>', unsafe_allow_html=True)
-    # Initialize chat history once.
-    if "messages" not in st.session_state:
-        st.session_state.messages = [DEFAULT_GREETING]
+# Initialize chat
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-    # Re-render chat history.
-    for idx, message in enumerate(st.session_state.messages):
-        with st.chat_message(message["role"]):
-            if message.get("is_greeting"):
-                st.markdown(message["content"], unsafe_allow_html=True)
-            else:
-                st.markdown(message["content"])
-            # Only render extra details for assistant messages.
-            if message["role"] == "assistant":
-                # Show prior rows if present.
-                if message.get("rows") is not None:
-                    render_results(
-                        message["rows"],
-                        show_chart=message.get("show_chart", False),
-                        intent=message.get("intent"),
-                        key_prefix=f"history-{idx}",
-                    )
-                # Show prior error if present.
-                if message.get("error"):
-                    st.error(message["error"])
-                # Optional SQL reveal.
-                if message.get("sql"):
-                    render_sql_button(message["sql"], idx)
+# Display chat history
+for idx, message in enumerate(st.session_state.messages):
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+        if message["role"] == "assistant":
+            if message.get("rows") is not None:
+                render_results(message["rows"], show_chart=message.get("show_chart", False))
+            if message.get("error"):
+                st.error(message["error"])
+            if message.get("sql"):
+                render_sql(message["sql"], idx)
 
-components.html(
-    """
-    <script>
-    const start = Date.now();
-    const timer = setInterval(() => {
-        // Attach CSS classes after the DOM is ready (Streamlit rebuilds often).
-        const headerAnchor = window.parent.document.getElementById("header-anchor");
-        if (headerAnchor) {
-            const block = headerAnchor.closest('div[data-testid="stVerticalBlock"]');
-            if (block && !block.classList.contains("app-header")) {
-                block.classList.add("app-header");
-            }
-        }
-        const chatAnchor = window.parent.document.getElementById("chat-scroll-anchor");
-        if (chatAnchor) {
-            const block = chatAnchor.closest('div[data-testid="stVerticalBlock"]');
-            if (block && !block.classList.contains("chat-scroll")) {
-                block.classList.add("chat-scroll");
-            }
-        }
-        if ((headerAnchor && chatAnchor) || Date.now() - start > 3000) {
-            clearInterval(timer);
-        }
-    }, 50);
-    </script>
-    """,
-    height=0,
-)
-
-user_prompt = st.chat_input("Ask about your data")
-# Only process when the user submits a question.
-if user_prompt:
-    st.session_state.messages.append({"role": "user", "content": user_prompt})
-    # Render the just-submitted question in the current run.
-    with chat_container:
-        with st.chat_message("user"):
-            st.markdown(user_prompt)
-    intent = parse_chart_intent(user_prompt, show_chart)
-    last_result = get_last_result(st.session_state.messages)
-    if intent["requested"] and last_result and is_followup_plot_request(user_prompt):
-        # Allow "plot that" follow-ups without re-querying the database.
-        with chat_container:
-            with st.chat_message("assistant"):
-                st.markdown("Here is the chart for the previous result.")
-                render_results(
-                    last_result["rows"],
-                    show_chart=True,
-                    intent=intent,
-                    key_prefix=f"followup-{len(st.session_state.messages)}",
-                )
-                if last_result.get("sql"):
-                    render_sql_button(last_result["sql"], len(st.session_state.messages))
-        st.session_state.messages.append(
-            {
-                "role": "assistant",
-                "content": "Here is the chart for the previous result.",
-                "sql": last_result.get("sql"),
-                "rows": last_result.get("rows"),
-                "show_chart": True,
-                "intent": intent,
-            }
-        )
-        st.stop()
-    clarification = needs_clarification(user_prompt, schema)
+# Chat input
+if prompt := st.chat_input("What would you like to know?"):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    
+    # Check for clarification
+    clarification = needs_clarification(prompt, schema)
     if clarification:
-        with chat_container:
-            with st.chat_message("assistant"):
-                st.markdown(clarification)
+        with st.chat_message("assistant"):
+            st.markdown(clarification)
         st.session_state.messages.append({"role": "assistant", "content": clarification})
         st.stop()
-    with chat_container:
-        with st.chat_message("assistant"):
-            with st.spinner("Generating SQL..."):
-                result = query_with_retries(
-                    user_prompt,
-                    schema_details,
-                    schema,
-                    db_url,
-                    model,
-                    QUERY_LIMIT,
-                    SQL_MAX_RETRIES,
-                    intent=intent,
-                )
-
-            # Surface errors before attempting to answer.
-            if result["error"]:
-                error = result["error"]
-                st.error(error)
-                st.session_state.messages.append(
-                    {
-                        "role": "assistant",
-                        "content": "I ran into an error while answering that.",
-                        "error": error,
-                        "sql": result.get("sql"),
-                    }
-                )
-                st.stop()
-
-            sql = result["sql"]
-            rows = result["rows"]
-            plot_requested = intent["requested"]
-
-            # Summarize results, then show data and optional SQL.
-            answer_rows = rows[: int(get_setting("ANSWER_MAX_ROWS", "50"))]
-            with st.spinner("Generating answer..."):
-                try:
-                    range_answer = infer_range_answer(answer_rows)
-                    # Prefer a direct range explanation when detected.
-                    if range_answer:
-                        answer = range_answer
-                    else:
-                        answer = generate_answer(user_prompt, answer_rows, model)
-                except Exception as exc:
-                    answer = f"I could not generate an answer: {exc}"
-            st.markdown(answer)
-            render_results(
-                rows,
-                show_chart=plot_requested,
-                intent=intent,
-                key_prefix=f"result-{len(st.session_state.messages)}",
+    
+    # Process query
+    with st.chat_message("assistant"):
+        with st.spinner("Analyzing..."):
+            result = query_with_retries(
+                prompt, schema_details, schema, db_url, model, QUERY_LIMIT, SQL_MAX_RETRIES
             )
-            render_sql_button(sql, len(st.session_state.messages))
-
-            st.session_state.messages.append(
-                {
-                    "role": "assistant",
-                    "content": answer,
-                    "sql": sql,
-                    "rows": rows,
-                    "show_chart": plot_requested,
-                    "intent": intent,
-                }
-            )
-
-
+        
+        if result["error"]:
+            st.error(result["error"])
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": "I encountered an issue processing that query.",
+                "error": result["error"],
+                "sql": result.get("sql"),
+            })
+            st.stop()
+        
+        sql = result["sql"]
+        rows = result["rows"]
+        plot_requested = show_chart or wants_chart(prompt)
+        
+        # Generate answer
+        answer_rows = rows[:int(get_setting("ANSWER_MAX_ROWS", "50"))]
+        with st.spinner(""):
+            try:
+                range_answer = infer_range_answer(answer_rows)
+                answer = range_answer if range_answer else generate_answer(prompt, answer_rows, model)
+            except Exception as exc:
+                answer = f"Retrieved {len(rows)} results."
+        
+        st.markdown(answer)
+        render_results(rows, show_chart=plot_requested)
+        render_sql(sql, len(st.session_state.messages))
+        
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": answer,
+            "sql": sql,
+            "rows": rows,
+            "show_chart": plot_requested,
+        })
