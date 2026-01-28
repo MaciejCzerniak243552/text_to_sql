@@ -341,8 +341,7 @@ if not db_url:
 db_name = get_db_display_name(db_url)
 
 try:
-    schema = extract_schema(db_url)
-    schema_details = json.dumps(schema, ensure_ascii=True)
+    schema, schema_details = extract_schema(db_url)
 except Exception as exc:
     st.error(f"Could not connect to database: {exc}")
     st.stop()
