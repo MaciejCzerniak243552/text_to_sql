@@ -41,7 +41,7 @@ Create a `.env` file in the project root (do not commit secrets):
 
 ```env
 # Ollama
-OLLAMA_MODEL=qwen3:latest
+OLLAMA_MODEL=qwen3:8b
 OLLAMA_BASE_URL=http://localhost:11434
 
 # Database (choose one approach)
@@ -57,9 +57,7 @@ DB_PASSWORD=password
 DB_NAME=database
 
 # Query behavior
-QUERY_LIMIT=200
 SQL_MAX_RETRIES=2
-ANSWER_MAX_ROWS=50
 ```
 
 If you prefer Streamlit secrets, put the same keys in `.streamlit/secrets.toml`.
