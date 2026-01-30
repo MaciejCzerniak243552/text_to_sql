@@ -246,11 +246,10 @@ def fix_sql_query(
 
 
 def generate_answer(query: str, rows: List[Dict[str, Any]], model: OllamaLLM) -> str:
-    """Summarize results into a user-facing answer."""
-    prompt = ChatPromptTemplate.from_template(ANSWER_TEMPLATE)
-    chain = prompt | model
-    results_json = json.dumps(make_json_safe(rows), ensure_ascii=True)
-    return clean_text(chain.invoke({"query": query, "results": results_json}))
+    """Return a minimal answer so the table/plot carry the detail."""
+    if rows:
+        return "Here are the results."
+    return "No data was found."
 
 
 def infer_range_answer(rows: List[Dict[str, Any]]) -> Optional[str]:

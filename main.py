@@ -23,7 +23,7 @@ from artifacts.chat_utils import (
     query_with_retries,
 )
 from artifacts.db_utils import extract_schema
-from artifacts.llm_utils import generate_answer, infer_range_answer
+from artifacts.llm_utils import generate_answer
 from artifacts.viz_utils import charts_available, render_results
 
 # Load environment variables from a local .env file when present.
@@ -416,12 +416,7 @@ if user_prompt:
             answer_rows = rows[: int(get_setting("ANSWER_MAX_ROWS", "50"))]
             with st.spinner("Generating answer..."):
                 try:
-                    range_answer = infer_range_answer(answer_rows)
-                    # Prefer a direct range explanation when detected.
-                    if range_answer:
-                        answer = range_answer
-                    else:
-                        answer = generate_answer(user_prompt, answer_rows, model)
+                    answer = generate_answer(user_prompt, answer_rows, model)
                 except Exception as exc:
                     answer = f"I could not generate an answer: {exc}"
             st.markdown(answer)
