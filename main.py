@@ -413,10 +413,9 @@ if user_prompt:
             plot_requested = intent["requested"]
 
             # Summarize results, then show data and optional SQL.
-            answer_rows = rows[: int(get_setting("ANSWER_MAX_ROWS", "50"))]
             with st.spinner("Generating answer..."):
                 try:
-                    answer = generate_answer(user_prompt, answer_rows, model)
+                    answer = generate_answer(user_prompt, rows, model)
                 except Exception as exc:
                     answer = f"I could not generate an answer: {exc}"
             st.markdown(answer)
