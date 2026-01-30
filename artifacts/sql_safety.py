@@ -112,4 +112,9 @@ def ensure_limit(sql: str, limit: int = 200, chart_mode: bool = False) -> str:
     # Respect existing LIMIT/FETCH clauses.
     if re.search(r"\blimit\b|\bfetch\b", sql, flags=re.IGNORECASE):
         return sql
+    # Skip LIMIT for single-row aggregate queries (e.g., COUNT/SUM without GROUP BY).
+    has_aggregate = re.search(r"\b(count|sum|avg|min|max)\s*\(", sql, flags=re.IGNORECASE)
+    has_group_by = re.search(r"\bgroup\s+by\b", sql, flags=re.IGNORECASE)
+    if has_aggregate and not has_group_by:
+        return sql
     return f"{sql} LIMIT {limit}"

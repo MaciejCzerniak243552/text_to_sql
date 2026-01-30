@@ -144,7 +144,6 @@ def query_with_retries(
     schema: Dict[str, List[str]],
     db_url: str,
     model: OllamaLLM,
-    limit: int,
     max_retries: int,
     intent: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -154,7 +153,7 @@ def query_with_retries(
     last_error = None
 
     for attempt in range(max_retries + 1):
-        sql = ensure_limit(sql, limit=limit, chart_mode=bool(intent and intent.get("requested")))
+        sql = ensure_limit(sql, limit=0, chart_mode=bool(intent and intent.get("requested")))
         safety_error = sql_safety_reason(sql, schema)
         if safety_error:
             return {"sql": sql, "rows": None, "error": safety_error}

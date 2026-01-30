@@ -132,8 +132,8 @@ Chart intent: chart_type={chart_type}, grain={grain}, x={x}, y={y}, series={seri
 """
 
 ANSWER_TEMPLATE = """
-You are a data assistant. Answer in 1-2 short sentences using the JSON results.
-If results are empty, say no data was found. Do not mention SQL or the database.
+You are a data assistant. answer="Here are results:" or if results are empty, say no data was found.
+Do not mention SQL or the database.
 
 Question: {query}
 Results: {results}

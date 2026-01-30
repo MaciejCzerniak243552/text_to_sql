@@ -190,7 +190,6 @@ if not OLLAMA_MODEL:
 # Use a remote Ollama base URL when configured; otherwise default to local.
 model = get_ollama_client(OLLAMA_MODEL, OLLAMA_BASE_URL)
 
-QUERY_LIMIT = int(get_setting("QUERY_LIMIT", "200"))
 SQL_MAX_RETRIES = int(get_setting("SQL_MAX_RETRIES", "2"))
 
 # Resolve DB connection info.
@@ -391,7 +390,6 @@ if user_prompt:
                     schema,
                     db_url,
                     model,
-                    QUERY_LIMIT,
                     SQL_MAX_RETRIES,
                     intent=intent,
                 )
