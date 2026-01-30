@@ -1,8 +1,8 @@
 services:
   app:
     build: .
-    expose:
-      - "8502"
+    ports:
+      - "8080:8502"
     env_file:
       - .env
     environment:
@@ -19,14 +19,4 @@ services:
       start_period: 25s
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    restart: unless-stopped
-  nginx:
-    image: nginx:1.27-alpine
-    ports:
-      - "8080:80"
-    depends_on:
-      app:
-        condition: service_healthy
-    volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     restart: unless-stopped
